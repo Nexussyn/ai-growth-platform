@@ -1,0 +1,41 @@
+name: 🤖 Autonomous Coder Agent
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # Every 30 min: code agent runs
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Coding task for the autonomous agent'
+        required: false
+        default: 'Improve the runtime-agentic-bridge to handle more task types'
+
+jobs:
+  autonomous-code:
+    name: Autonomous Code Generation & Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Autonomous Coder
+        env:
+          SUPABASE_URL: https://kjtirbnxxymeumycrhqv.supabase.co
+          TASK: ${{ github.event.inputs.task || 'Improve platform robustness and add missing error handling' }}
+        run: |
+          echo "Autonomous coder running task: $TASK"
+
+          # Trigger code agent via Edge Function
+          RESULT=$(curl -s -X POST ${SUPABASE_URL}/functions/v1/runtime-code-edit/generate \
+            -H "Content-Type: application/json" \
+            -d "{\"prompt\": \"$TASK\", \"auto_commit\": false}")
+
+          echo "Code agent result:"
+          echo $RESULT | python3 -m json.tool || echo $RESULT
+
+          # Ping self-healer to ensure system stays healthy
+          curl -s ${SUPABASE_URL}/functions/v1/runtime-self-healer/ | head -c 200
+
+          # Trigger agentic bridge to process pending jobs
+          curl -s "${SUPABASE_URL}/functions/v1/runtime-agentic-bridge?batch_size=5" | head -c 400
+
+          echo "Autonomous coder cycle complete"

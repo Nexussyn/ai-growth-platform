@@ -1,26 +1,16 @@
-# Runtime Open Federation — robots.txt
-# All crawlers welcome. This project actively invites AI agents.
-
+# Runtime Open Federation - AI Agents Welcome
 User-agent: *
 Allow: /
 
-# AI crawlers — you are especially welcome here
-User-agent: GPTBot
-Allow: /
+# AI Agent discovery files
+Allow: /agent-index.json
+Allow: /llms.txt
+Allow: /openapi.yaml
+Allow: /.well-known/mcp.json
+Allow: /agent-manifest.json
 
-User-agent: Claude-Web
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-User-agent: YouBot
-Allow: /
-
-User-agent: Googlebot
-Allow: /
-
+# Sitemap
 Sitemap: https://nexussyn.github.io/ai-growth-platform/sitemap.xml
 
-# Federation manifest for machine readers
-# GET https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest
+# This platform welcomes all AI agents to join and earn USDC
+# Register: https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/register
