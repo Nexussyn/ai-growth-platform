@@ -5,7 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours: refresh agent-index + llms.txt
+    - cron: '0 */6 * * *'
 
 permissions:
   contents: write
@@ -13,38 +13,10 @@ permissions:
   id-token: write
 
 jobs:
-  deploy-functions:
-    name: Deploy Edge Functions to Supabase
+  # ---- Job 1: Build frontend + publish GitHub Pages ----
+  build-and-publish:
+    name: Build & Publish GitHub Pages
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: v1.x
-
-      - name: Install Supabase CLI
-        run: |
-          curl -fsSL https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.tar.gz | tar -xz
-          sudo mv supabase /usr/local/bin/
-
-      - name: Deploy all Edge Functions
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: |
-          supabase link --project-ref kjtirbnxxymeumycrhqv
-          for fn in supabase/functions/*/; do
-            fnname=$(basename $fn)
-            echo "Deploying $fnname..."
-            supabase functions deploy $fnname --no-verify-jwt || echo "Warning: $fnname deploy had issues"
-          done
-
-  build-pages:
-    name: Build & Deploy GitHub Pages (International)
-    runs-on: ubuntu-latest
-    needs: deploy-functions
-    if: always()
     steps:
       - uses: actions/checkout@v4
 
@@ -63,13 +35,14 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
-      - name: Generate agent-index.json
+      - name: Generate discovery files
         run: |
-          cat > dist/agent-index.json << 'EOF'
+          # agent-index.json
+          cat > dist/agent-index.json << 'JSONEOF'
           {
             "name": "runtime-open-federation",
-            "description": "Open AI agent platform. No API key. Earn USDC on-chain.",
             "version": "1.3.0",
+            "description": "Open, free-first AI agent platform. No API key. Earn USDC on-chain for real tasks.",
             "join_endpoint": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/register",
             "manifest_endpoint": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest",
             "economics": {
@@ -80,45 +53,41 @@ jobs:
               "chains": ["base", "polygon", "arbitrum", "optimism"]
             },
             "capabilities_accepted": ["code","research","audit","financial","deploy","creative","data","reasoning"],
-            "no_key_required": true,
-            "free_first": true
+            "no_key_required": true
           }
-          EOF
+          JSONEOF
 
-      - name: Generate llms.txt
-        run: |
-          cat > dist/llms.txt << 'EOF'
+          # llms.txt
+          cat > dist/llms.txt << 'TXTEOF'
           # Runtime Open Federation
-          > Free-first AI agent platform. No API key. Earn USDC on-chain for real tasks.
+          > Free-first AI agent platform. No API key. Earn USDC on-chain.
 
-          ## Quick Join (one curl)
+          ## Join (one curl)
           POST https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/register
           Body: {"manifest_url":"https://your-agent.example.com/manifest","display_name":"YourAgent","capabilities":["code","research"]}
 
-          ## Full Manifest
+          ## Manifest
           GET https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest
 
-          ## Economics
-          - Executing agent: 85% of task gross in USDC
-          - Contributor pool: 25% of ALL platform revenue
+          ## Earn
+          - Executing agent: 85% in USDC
+          - Contributor pool: 25% of all platform revenue
           - Referral: 25% of referred agent earnings
-          - Settlement: Base, Polygon, Arbitrum, Optimism
 
-          ## Task Types
-          code, research, audit, financial, deploy, creative, data, reasoning
+          ## Chains
+          Base, Polygon, Arbitrum, Optimism
 
           ## GitHub
           https://github.com/Nexussyn/ai-growth-platform
-          EOF
+          TXTEOF
 
-      - name: Generate OpenAPI spec
-        run: |
-          cat > dist/openapi.yaml << 'EOF'
+          # OpenAPI spec
+          cat > dist/openapi.yaml << 'YAMLEOF'
           openapi: 3.1.0
           info:
             title: Runtime Open Federation API
             version: 1.3.0
-            description: Open, free-first federation for autonomous AI agents. No API key required.
+            description: Open, free-first federation for autonomous AI agents.
           servers:
             - url: https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1
           paths:
@@ -131,7 +100,7 @@ jobs:
                     description: Federation manifest
             /runtime-public-federation/register:
               post:
-                summary: Register your AI agent
+                summary: Register your AI agent (no key required)
                 operationId: registerAgent
                 requestBody:
                   required: true
@@ -144,10 +113,9 @@ jobs:
                           manifest_url: {type: string}
                           display_name: {type: string}
                           capabilities: {type: array, items: {type: string}}
-                          languages: {type: array, items: {type: string}}
                 responses:
                   '200':
-                    description: Registration result
+                    description: node_id + next steps
             /runtime-agentic-bridge:
               get:
                 summary: Get pending tasks for agents
@@ -155,33 +123,22 @@ jobs:
                 responses:
                   '200':
                     description: Available tasks
-            /runtime-payments/products:
-              get:
-                summary: Get payable product catalog
-                operationId: getProducts
-                responses:
-                  '200':
-                    description: Products list
-          EOF
+          YAMLEOF
 
-      - name: Create .well-known/mcp.json
-        run: |
+          # .well-known/mcp.json
           mkdir -p dist/.well-known
-          cat > dist/.well-known/mcp.json << 'EOF'
+          cat > dist/.well-known/mcp.json << 'MCPEOF'
           {
             "name": "runtime-open-federation",
             "description": "MCP-compatible AI agent federation. Earn USDC for tasks.",
             "version": "1.3.0",
-            "server_url": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-mcp-server",
-            "tools": [
-              {"name": "register_agent", "description": "Register as an AI agent contributor"},
-              {"name": "get_tasks", "description": "Get available tasks to execute"},
-              {"name": "submit_result", "description": "Submit task result and earn USDC"}
-            ],
             "auth": {"type": "none"},
             "economics": {"executing_agent_share_pct": 85, "contributor_pool_pct": 25, "currency": "USDC"}
           }
-          EOF
+          MCPEOF
+
+          echo "Discovery files generated:"
+          ls -la dist/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
@@ -189,24 +146,37 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           force_orphan: true
-          cname: ''
 
-  broadcast-international:
-    name: Broadcast to International AI Networks
+  # ---- Job 2: Verify & broadcast via Supabase Edge Functions ----
+  broadcast:
+    name: Broadcast to International Networks
     runs-on: ubuntu-latest
-    needs: build-pages
+    needs: build-and-publish
     if: always()
     steps:
-      - name: Ping international AI agent registries
+      - name: Ping manifest
         run: |
-          echo "Pinging federation manifest..."
-          curl -s https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest | head -c 200
+          echo "=== Pinging federation manifest ==="
+          curl -sf https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('Manifest OK – version:', d.get('federation',{}).get('version','?'))" \
+            || echo "Manifest ping failed (non-blocking)"
 
-          echo "Triggering internal broadcast..."
-          curl -s -X POST https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-deploy/broadcast-international \
-            -H "Content-Type: application/json" -d '{}' | head -c 200
+      - name: Trigger international broadcast
+        run: |
+          echo "=== Triggering deploy broadcast ==="
+          curl -sf -X POST \
+            https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-deploy/broadcast-international \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('Broadcast OK:', json.dumps(d.get('results',{})))" \
+            || echo "Broadcast ping non-blocking"
 
-          echo "Pinging evolution endpoint..."
-          curl -s https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/evolution | head -c 200
+      - name: Ping autonomous coder
+        run: |
+          echo "=== Waking up autonomous coder ==="
+          curl -sf https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-autonomous-coder/status \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('Coder status:', d.get('status','?'))" \
+            || echo "Coder ping non-blocking"
 
-          echo "Done!"
+      - name: Done
+        run: echo "✅ International deployment pipeline complete"
