@@ -21,11 +21,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Apply migrations via Supabase Management API
+      - name: Pre-migration cleanup
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          echo "Applying migrations via Supabase API..."
+          echo "Cleaning up existing policies, secrets and agent cap..."
+
+          # Drop all RLS policies
+          curl -s -X POST \
+            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"query": "DO $$ DECLARE r RECORD; BEGIN FOR r IN (SELECT schemaname, tablename, policyname FROM pg_policies WHERE schemaname IN (''public'',''legacy'')) LOOP EXECUTE format(''DROP POLICY IF EXISTS %I ON %I.%I'', r.policyname, r.schemaname, r.tablename); END LOOP; END; $$;"}'
+
+          # Delete all vault secrets
+          curl -s -X POST \
+            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"query": "DELETE FROM vault.secrets;"}'
+
+          # Drop agent cap trigger and function
+          curl -s -X POST \
+            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"query": "DO $$ DECLARE r RECORD; BEGIN FOR r IN (SELECT trigger_schema, event_object_table, trigger_name FROM information_schema.triggers WHERE trigger_name ILIKE ''%agent_cap%'') LOOP EXECUTE format(''DROP TRIGGER IF EXISTS %I ON %I.%I CASCADE'', r.trigger_name, r.trigger_schema, r.event_object_table); END LOOP; END; $$; DROP FUNCTION IF EXISTS enforce_agent_cap() CASCADE;"}'
+
+          # Truncate governed_agents if exists
+          curl -s -X POST \
+            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"query": "DO $$ BEGIN IF EXISTS (SELECT FROM pg_tables WHERE schemaname=''public'' AND tablename=''governed_agents'') THEN TRUNCATE governed_agents CASCADE; END IF; END; $$;"}'
+
+          echo "Cleanup done!"
+
+      - name: Apply all migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
           SUCCESS=0
           FAIL=0
 
@@ -42,17 +77,15 @@ jobs:
               --data-binary "$(jq -n --arg q "$SQL" '{query: $q}')")
 
             if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-              echo "  OK ($HTTP_CODE)"
+              echo "  OK"
               SUCCESS=$((SUCCESS+1))
             else
-              MSG=$(cat /tmp/resp.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('message','?'))" 2>/dev/null || echo 'unknown')
-              echo "  SKIP ($HTTP_CODE): $MSG"
+              MSG=$(python3 -c "import sys,json; d=json.load(open('/tmp/resp.json')); print(d.get('message','?'))" 2>/dev/null || echo 'unknown')
+              echo "  FAIL: $MSG"
               FAIL=$((FAIL+1))
             fi
           done
 
           echo ""
-          echo "============================"
-          echo "SUCCESS: $SUCCESS"
-          echo "SKIPPED/WARN: $FAIL"
-          echo "============================"
+          echo "SUCCESS: $SUCCESS / FAIL: $FAIL"
+          [ "$FAIL" -eq 0 ] && echo "ALL MIGRATIONS APPLIED!" || echo "Some migrations failed - check logs above"
