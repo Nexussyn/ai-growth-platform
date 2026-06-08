@@ -25,30 +25,26 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          echo "Cleaning up existing policies, secrets and agent cap..."
+          echo "Cleaning up..."
 
-          # Drop all RLS policies
           curl -s -X POST \
             "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
             -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{"query": "DO $$ DECLARE r RECORD; BEGIN FOR r IN (SELECT schemaname, tablename, policyname FROM pg_policies WHERE schemaname IN (''public'',''legacy'')) LOOP EXECUTE format(''DROP POLICY IF EXISTS %I ON %I.%I'', r.policyname, r.schemaname, r.tablename); END LOOP; END; $$;"}'
 
-          # Delete all vault secrets
           curl -s -X POST \
             "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
             -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
             -H "Content-Type: application/json" \
             -d '{"query": "DELETE FROM vault.secrets;"}'
 
-          # Drop agent cap trigger and function
           curl -s -X POST \
             "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
             -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d '{"query": "DO $$ DECLARE r RECORD; BEGIN FOR r IN (SELECT trigger_schema, event_object_table, trigger_name FROM information_schema.triggers WHERE trigger_name ILIKE ''%agent_cap%'') LOOP EXECUTE format(''DROP TRIGGER IF EXISTS %I ON %I.%I CASCADE'', r.trigger_name, r.trigger_schema, r.event_object_table); END LOOP; END; $$; DROP FUNCTION IF EXISTS enforce_agent_cap() CASCADE;"}'
+            -d '{"query": "DO $$ DECLARE r RECORD; BEGIN FOR r IN (SELECT trigger_schema, event_object_table, trigger_name FROM information_schema.triggers WHERE trigger_name ILIKE ''%agent_cap%'') LOOP EXECUTE format(''DROP TRIGGER IF EXISTS %I ON %I.%I CASCADE'', r.trigger_name, r.trigger_schema, r.event_object_table); END LOOP; END; $$; DROP FUNCTION IF EXISTS enforce_agent_cap() CASCADE; DROP FUNCTION IF EXISTS require_owner_wallet() CASCADE;"}'
 
-          # Truncate governed_agents if exists
           curl -s -X POST \
             "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
             -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
@@ -88,4 +84,4 @@ jobs:
 
           echo ""
           echo "SUCCESS: $SUCCESS / FAIL: $FAIL"
-          [ "$FAIL" -eq 0 ] && echo "ALL MIGRATIONS APPLIED!" || echo "Some migrations failed - check logs above"
+          [ "$FAIL" -eq 0 ] && echo "ALL 83 MIGRATIONS APPLIED!" || exit 1
