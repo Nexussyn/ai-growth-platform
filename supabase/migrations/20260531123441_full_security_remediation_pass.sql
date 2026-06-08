@@ -32,6 +32,36 @@
 */
 
 -- ══════════════════════════════════════════════════════════════════════════════
+-- 0. ENSURE TABLES EXIST (guard for missing tables in fresh environments)
+-- ══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS public.payment_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.payment_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.payment_transactions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.rate_limit_buckets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz DEFAULT now()
+);
+
+-- Enable RLS on these tables
+ALTER TABLE public.payment_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rate_limit_buckets ENABLE ROW LEVEL SECURITY;
+
+-- ══════════════════════════════════════════════════════════════════════════════
 -- 1. FUNCTION HARDENING
 -- ══════════════════════════════════════════════════════════════════════════════
 
