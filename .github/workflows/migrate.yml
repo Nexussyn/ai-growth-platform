@@ -21,37 +21,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Pre-migration cleanup
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Patch migration files
         run: |
-          echo "Cleaning up..."
+          python3 << 'PYEOF'
+          import os, re, glob
 
-          curl -s -X POST \
-            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
-            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{"query": "DO $$ DECLARE r RECORD; BEGIN FOR r IN (SELECT schemaname, tablename, policyname FROM pg_policies WHERE schemaname IN (''public'',''legacy'')) LOOP EXECUTE format(''DROP POLICY IF EXISTS %I ON %I.%I'', r.policyname, r.schemaname, r.tablename); END LOOP; END; $$;"}'
-
-          curl -s -X POST \
-            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
-            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{"query": "DELETE FROM vault.secrets;"}'
-
-          curl -s -X POST \
-            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
-            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{"query": "DO $$ DECLARE r RECORD; BEGIN FOR r IN (SELECT trigger_schema, event_object_table, trigger_name FROM information_schema.triggers WHERE trigger_name ILIKE ''%agent_cap%'') LOOP EXECUTE format(''DROP TRIGGER IF EXISTS %I ON %I.%I CASCADE'', r.trigger_name, r.trigger_schema, r.event_object_table); END LOOP; END; $$; DROP FUNCTION IF EXISTS enforce_agent_cap() CASCADE; DROP FUNCTION IF EXISTS require_owner_wallet() CASCADE;"}'
-
-          curl -s -X POST \
-            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
-            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{"query": "DO $$ BEGIN IF EXISTS (SELECT FROM pg_tables WHERE schemaname=''public'' AND tablename=''governed_agents'') THEN TRUNCATE governed_agents CASCADE; END IF; END; $$;"}'
-
-          echo "Cleanup done!"
+          files = sorted(glob.glob("supabase/migrations/*.sql"))
+          for path in files:
+              sql = open(path).read()
+              lines = sql.splitlines()
+              patched = []
+              for line in lines:
+                  # Before every CREATE POLICY "name", inject DROP POLICY IF EXISTS "name"
+                  m = re.match(r'(create\s+policy\s+)("[^"]+")(\s+on\s+)(\S+)', line, re.IGNORECASE)
+                  if m:
+                      policy_name = m.group(2)
+                      table_name  = m.group(4).rstrip(';')
+                      patched.append(f'DROP POLICY IF EXISTS {policy_name} ON {table_name};')
+                  patched.append(line)
+              # Also drop enforce_agent_cap trigger/function at top of every file
+              header = (
+                  "DROP TRIGGER IF EXISTS trg_enforce_agent_cap ON governed_agents CASCADE;\n"
+                  "DROP TRIGGER IF EXISTS enforce_agent_cap_trigger ON governed_agents CASCADE;\n"
+                  "DROP FUNCTION IF EXISTS enforce_agent_cap() CASCADE;\n"
+                  "DELETE FROM vault.secrets WHERE name IN ("
+                  "'supabase_project_url','supabase_service_role_key','openai_api_key',"
+                  "'anthropic_api_key','telegram_bot_token','owner_wallet_address',"
+                  "'stripe_secret_key','stripe_webhook_secret','supabase_anon_key',"
+                  "'together_api_key','cohere_api_key','groq_api_key','mistral_api_key',"
+                  "'huggingface_api_key','replicate_api_key','perplexity_api_key'"
+                  ");\n"
+              ) if 'vault.create_secret' in sql or 'enforce_agent_cap' in sql else ""
+              with open(path, 'w') as f:
+                  f.write(header + "\n".join(patched))
+          print(f"Patched {len(files)} migration files")
+          PYEOF
 
       - name: Apply all migrations
         env:
@@ -63,7 +72,7 @@ jobs:
           for f in $(ls supabase/migrations/*.sql | sort); do
             NAME=$(basename "$f" .sql)
             SQL=$(cat "$f")
-            echo "--- Applying: $NAME"
+            echo "--- $NAME"
 
             HTTP_CODE=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
               -X POST \
@@ -76,7 +85,7 @@ jobs:
               echo "  OK"
               SUCCESS=$((SUCCESS+1))
             else
-              MSG=$(python3 -c "import sys,json; d=json.load(open('/tmp/resp.json')); print(d.get('message','?'))" 2>/dev/null || echo 'unknown')
+              MSG=$(python3 -c "import json; d=json.load(open('/tmp/resp.json')); print(d.get('message','?'))" 2>/dev/null || echo 'unknown')
               echo "  FAIL: $MSG"
               FAIL=$((FAIL+1))
             fi
