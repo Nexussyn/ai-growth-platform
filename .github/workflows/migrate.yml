@@ -10,6 +10,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PROJECT_REF: kjtirbnxxymeumycrhqv
 
 jobs:
   migrate:
@@ -20,16 +21,68 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
-      - name: Apply migrations via Supabase CLI
+      - name: Apply all migrations via Supabase Management API
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
-          supabase db push \
-            --project-ref kjtirbnxxymeumycrhqv \
-            --password "$SUPABASE_DB_PASSWORD"
+          set -e
+          PROJECT_REF="kjtirbnxxymeumycrhqv"
+          API="https://api.supabase.com/v1/projects/${PROJECT_REF}/database/migrations"
+          MIGRATIONS_DIR="supabase/migrations"
+
+          echo "=== Listing existing migrations on remote ==="
+          EXISTING=$(curl -sf -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/migrations" \
+            | jq -r '.[].version // empty' 2>/dev/null || echo "")
+          echo "Remote versions: $EXISTING"
+
+          SUCCESS=0
+          FAIL=0
+          SKIP=0
+
+          for SQL_FILE in $(ls "$MIGRATIONS_DIR"/*.sql | sort); do
+            FILENAME=$(basename "$SQL_FILE")
+            VERSION=$(echo "$FILENAME" | sed 's/_.*//')
+            NAME=$(echo "$FILENAME" | sed 's/\.sql$//' | sed 's/^[0-9]*_//')
+
+            # Skip if already applied
+            if echo "$EXISTING" | grep -qx "$VERSION"; then
+              echo "--- $FILENAME"
+              echo "  SKIP: already applied"
+              SKIP=$((SKIP+1))
+              continue
+            fi
+
+            SQL=$(cat "$SQL_FILE")
+            PAYLOAD=$(jq -n \
+              --arg version "$VERSION" \
+              --arg name "$NAME" \
+              --arg sql "$SQL" \
+              '{version: $version, name: $name, statements: [$sql]}')
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" \
+              -X POST "$API" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD")
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -n -1)
+
+            echo "--- $FILENAME"
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              echo "  OK"
+              SUCCESS=$((SUCCESS+1))
+            else
+              ERROR=$(echo "$BODY" | jq -r '.message // .error // .detail // "Unknown error"' 2>/dev/null || echo "$BODY")
+              echo "  FAIL: $ERROR"
+              FAIL=$((FAIL+1))
+            fi
+          done
+
+          echo ""
+          echo "=== RESULT: $SUCCESS ok / $SKIP skipped / $FAIL failed ==="
+
+          if [ "$FAIL" -gt 0 ]; then
+            exit 1
+          fi
