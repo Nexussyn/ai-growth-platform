@@ -1,39 +1,6 @@
 /*
   # Agent Brokerage Commission & Financial Engineering Layer
-
-  1. New Tables
-    - `brokerage_contracts`
-      - Each registered coding agent or external partner has a brokerage contract
-        defining commission rate, priority tier, and allowed task kinds.
-    - `brokerage_tasks`
-      - Central ledger of all brokered tasks: who requested, which agent was assigned,
-        value of the task, commission taken, status lifecycle.
-    - `brokerage_ledger`
-      - Append-only financial ledger of all commission earnings with double-entry
-        (debit client, credit platform, credit executing agent net of commission).
-    - `financial_engineering_positions`
-      - Tracks complex financial operations: yield stacking, arbitrage routes,
-        liquidity provision, cross-chain bridging — each with expected/realized P&L.
-    - `brokerage_stats_daily`
-      - Materialized daily rollup: tasks brokered, commissions earned, top agent, etc.
-
-  2. New Functions
-    - `broker_assign_task(...)` — routes an incoming task to the optimal agent,
-      creates brokerage_tasks + ledger entries, returns assignment ID.
-    - `broker_complete_task(...)` — marks task done, finalizes commission.
-    - `broker_open_position(...)` — opens a financial engineering position.
-    - `broker_close_position(...)` — closes position with realized P&L.
-    - `brokerage_dashboard()` — single RPC returning full brokerage state.
-
-  3. Security
-    - All tables RLS-enabled. service_role only for writes.
-    - Anon/authenticated get read access to aggregated views only via RPC.
-
-  4. Commission Model
-    - Default platform commission: 15% on coding tasks, 10% on research tasks,
-      20% on financial engineering tasks.
-    - Executing agent receives (100% - commission).
-    - Revenue flows: client pays gross → platform takes commission → agent gets net.
+  Fixed: guard coding_agents INSERT with IF EXISTS check
 */
 
 -- Brokerage contracts per agent
@@ -153,7 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_brokerage_tasks_agent ON brokerage_tasks(agent_sl
 CREATE INDEX IF NOT EXISTS idx_brokerage_ledger_task ON brokerage_ledger(task_id);
 CREATE INDEX IF NOT EXISTS idx_fin_positions_status ON financial_engineering_positions(status);
 
--- broker_assign_task: routes task to best agent, records commission
+-- broker_assign_task
 CREATE OR REPLACE FUNCTION public.broker_assign_task(
   p_task_kind text,
   p_task_summary text,
@@ -174,12 +141,8 @@ DECLARE
 BEGIN
   SELECT * INTO v_contract
   FROM brokerage_contracts
-  WHERE active = true
-    AND p_task_kind = ANY(allowed_task_kinds)
-  ORDER BY
-    reliability_score DESC,
-    priority_tier ASC,
-    total_tasks_completed DESC
+  WHERE active = true AND p_task_kind = ANY(allowed_task_kinds)
+  ORDER BY reliability_score DESC, priority_tier ASC, total_tasks_completed DESC
   LIMIT 1;
 
   IF v_contract IS NULL THEN
@@ -199,12 +162,9 @@ BEGIN
     (v_task_id, 'agent_payable', p_client_id, 'agent:' || v_contract.agent_slug, v_agent_net, 'Agent net payable on task completion');
 
   RETURN jsonb_build_object(
-    'task_id', v_task_id,
-    'agent_slug', v_contract.agent_slug,
-    'commission_pct', v_contract.commission_rate_pct,
-    'commission_usd', v_commission,
-    'agent_net_usd', v_agent_net,
-    'gross_value_usd', p_gross_value_usd
+    'task_id', v_task_id, 'agent_slug', v_contract.agent_slug,
+    'commission_pct', v_contract.commission_rate_pct, 'commission_usd', v_commission,
+    'agent_net_usd', v_agent_net, 'gross_value_usd', p_gross_value_usd
   );
 END;
 $$;
@@ -212,7 +172,7 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.broker_assign_task(text, text, numeric, text, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.broker_assign_task(text, text, numeric, text, jsonb) TO service_role;
 
--- broker_complete_task: finalizes commission + updates stats
+-- broker_complete_task
 CREATE OR REPLACE FUNCTION public.broker_complete_task(
   p_task_id uuid,
   p_result jsonb DEFAULT '{}'::jsonb,
@@ -259,7 +219,7 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.broker_complete_task(uuid, jsonb, numeric) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.broker_complete_task(uuid, jsonb, numeric) TO service_role;
 
--- broker_open_position: opens a financial engineering position
+-- broker_open_position
 CREATE OR REPLACE FUNCTION public.broker_open_position(
   p_strategy_type text,
   p_strategy_name text,
@@ -282,11 +242,8 @@ BEGIN
     (strategy_type, strategy_name, protocol_slug, chain, asset_in, amount_deployed_usd, expected_yield_pct, evidence, risk_score)
   VALUES
     (p_strategy_type, p_strategy_name, p_protocol_slug, p_chain, p_asset_in, p_amount_usd, p_expected_yield_pct, p_evidence,
-     CASE WHEN p_expected_yield_pct > 50 THEN 5
-          WHEN p_expected_yield_pct > 20 THEN 4
-          WHEN p_expected_yield_pct > 10 THEN 3
-          WHEN p_expected_yield_pct > 5 THEN 2
-          ELSE 1 END)
+     CASE WHEN p_expected_yield_pct > 50 THEN 5 WHEN p_expected_yield_pct > 20 THEN 4
+          WHEN p_expected_yield_pct > 10 THEN 3 WHEN p_expected_yield_pct > 5 THEN 2 ELSE 1 END)
   RETURNING id INTO v_id;
 
   INSERT INTO brokerage_ledger (position_id, entry_type, debit_account, credit_account, amount_usd, memo)
@@ -299,7 +256,7 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.broker_open_position(text, text, text, text, text, numeric, numeric, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.broker_open_position(text, text, text, text, text, numeric, numeric, jsonb) TO service_role;
 
--- broker_close_position: realizes P&L and takes commission
+-- broker_close_position
 CREATE OR REPLACE FUNCTION public.broker_close_position(
   p_position_id uuid,
   p_realized_pnl_usd numeric DEFAULT 0
@@ -328,14 +285,9 @@ BEGIN
     VALUES (p_position_id, 'financial_commission', 'protocol:' || COALESCE(v_pos.protocol_slug, v_pos.strategy_type), 'platform:realized_revenue', v_commission, 'Financial engineering commission on P&L');
   END IF;
 
-  UPDATE brokerage_stats_daily
-  SET financial_pnl_usd = financial_pnl_usd + p_realized_pnl_usd,
-      total_commission_usd = total_commission_usd + v_commission
-  WHERE date = CURRENT_DATE;
-
+  UPDATE brokerage_stats_daily SET financial_pnl_usd = financial_pnl_usd + p_realized_pnl_usd, total_commission_usd = total_commission_usd + v_commission WHERE date = CURRENT_DATE;
   IF NOT FOUND THEN
-    INSERT INTO brokerage_stats_daily (date, financial_pnl_usd, total_commission_usd)
-    VALUES (CURRENT_DATE, p_realized_pnl_usd, v_commission);
+    INSERT INTO brokerage_stats_daily (date, financial_pnl_usd, total_commission_usd) VALUES (CURRENT_DATE, p_realized_pnl_usd, v_commission);
   END IF;
 
   RETURN jsonb_build_object('closed', true, 'realized_pnl_usd', p_realized_pnl_usd, 'commission_usd', v_commission);
@@ -345,7 +297,7 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.broker_close_position(uuid, numeric) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.broker_close_position(uuid, numeric) TO service_role;
 
--- brokerage_dashboard: full summary for UI
+-- brokerage_dashboard
 CREATE OR REPLACE FUNCTION public.brokerage_dashboard()
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -353,12 +305,7 @@ SECURITY DEFINER
 SET search_path TO 'public', 'pg_temp'
 AS $$
 DECLARE
-  v_summary jsonb;
-  v_contracts jsonb;
-  v_recent_tasks jsonb;
-  v_positions jsonb;
-  v_ledger_totals jsonb;
-  v_daily jsonb;
+  v_summary jsonb; v_contracts jsonb; v_recent_tasks jsonb; v_positions jsonb; v_daily jsonb;
 BEGIN
   SELECT jsonb_build_object(
     'total_contracts', (SELECT count(*) FROM brokerage_contracts WHERE active = true),
@@ -372,96 +319,67 @@ BEGIN
     'total_deployed_usd', (SELECT COALESCE(sum(amount_deployed_usd), 0) FROM financial_engineering_positions WHERE status = 'open'),
     'total_realized_pnl_usd', (SELECT COALESCE(sum(realized_pnl_usd), 0) FROM financial_engineering_positions WHERE status = 'closed'),
     'avg_commission_pct', (SELECT COALESCE(avg(commission_pct), 15) FROM brokerage_tasks WHERE status = 'completed')
-  )
-  INTO v_summary;
+  ) INTO v_summary;
 
-  SELECT COALESCE(jsonb_agg(row_to_json(c)), '[]'::jsonb)
-  INTO v_contracts
-  FROM (
-    SELECT agent_slug, agent_type, commission_rate_pct, priority_tier, total_tasks_completed, total_commission_earned_usd, reliability_score, active
-    FROM brokerage_contracts WHERE active = true
-    ORDER BY total_commission_earned_usd DESC
-    LIMIT 20
-  ) c;
+  SELECT COALESCE(jsonb_agg(row_to_json(c)), '[]'::jsonb) INTO v_contracts
+  FROM (SELECT agent_slug, agent_type, commission_rate_pct, priority_tier, total_tasks_completed, total_commission_earned_usd, reliability_score, active FROM brokerage_contracts WHERE active = true ORDER BY total_commission_earned_usd DESC LIMIT 20) c;
 
-  SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb)
-  INTO v_recent_tasks
-  FROM (
-    SELECT id, agent_slug, task_kind, task_summary, gross_value_usd, commission_usd, agent_net_usd, status, quality_score, assigned_at, completed_at
-    FROM brokerage_tasks
-    ORDER BY created_at DESC
-    LIMIT 20
-  ) t;
+  SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb) INTO v_recent_tasks
+  FROM (SELECT id, agent_slug, task_kind, task_summary, gross_value_usd, commission_usd, agent_net_usd, status, quality_score, assigned_at, completed_at FROM brokerage_tasks ORDER BY created_at DESC LIMIT 20) t;
 
-  SELECT COALESCE(jsonb_agg(row_to_json(p)), '[]'::jsonb)
-  INTO v_positions
-  FROM (
-    SELECT id, strategy_type, strategy_name, protocol_slug, chain, asset_in, amount_deployed_usd, expected_yield_pct, realized_pnl_usd, unrealized_pnl_usd, commission_on_pnl_pct, status, opened_at, closed_at, risk_score
-    FROM financial_engineering_positions
-    ORDER BY opened_at DESC
-    LIMIT 20
-  ) p;
+  SELECT COALESCE(jsonb_agg(row_to_json(p)), '[]'::jsonb) INTO v_positions
+  FROM (SELECT id, strategy_type, strategy_name, protocol_slug, chain, asset_in, amount_deployed_usd, expected_yield_pct, realized_pnl_usd, unrealized_pnl_usd, commission_on_pnl_pct, status, opened_at, closed_at, risk_score FROM financial_engineering_positions ORDER BY opened_at DESC LIMIT 20) p;
 
-  SELECT COALESCE(jsonb_agg(row_to_json(d)), '[]'::jsonb)
-  INTO v_daily
-  FROM (
-    SELECT date, tasks_brokered, tasks_completed, gross_volume_usd, total_commission_usd, total_agent_payouts_usd, financial_pnl_usd, top_agent_slug
-    FROM brokerage_stats_daily
-    ORDER BY date DESC
-    LIMIT 14
-  ) d;
+  SELECT COALESCE(jsonb_agg(row_to_json(d)), '[]'::jsonb) INTO v_daily
+  FROM (SELECT date, tasks_brokered, tasks_completed, gross_volume_usd, total_commission_usd, total_agent_payouts_usd, financial_pnl_usd, top_agent_slug FROM brokerage_stats_daily ORDER BY date DESC LIMIT 14) d;
 
-  RETURN jsonb_build_object(
-    'summary', v_summary,
-    'contracts', v_contracts,
-    'recent_tasks', v_recent_tasks,
-    'positions', v_positions,
-    'daily_stats', v_daily,
-    'generated_at', now()
-  );
+  RETURN jsonb_build_object('summary', v_summary, 'contracts', v_contracts, 'recent_tasks', v_recent_tasks, 'positions', v_positions, 'daily_stats', v_daily, 'generated_at', now());
 END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION public.brokerage_dashboard() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.brokerage_dashboard() TO anon, authenticated, service_role;
 
--- Seed brokerage contracts for all active coding agents
-INSERT INTO brokerage_contracts (agent_slug, agent_type, commission_rate_pct, priority_tier, allowed_task_kinds)
-SELECT
-  slug,
-  'coding_agent',
-  CASE
-    WHEN free_hosted = true THEN 15.00
-    ELSE 10.00
-  END,
-  CASE WHEN agentic = true AND tool_use = true THEN 1 ELSE 2 END,
-  ARRAY['code','research','financial','audit','deploy']
-FROM coding_agents
-WHERE active = true
-ON CONFLICT (agent_slug, agent_type) DO NOTHING;
+-- Seed brokerage contracts for coding_agents (guard: skip if table doesn't exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'coding_agents') THEN
+    INSERT INTO brokerage_contracts (agent_slug, agent_type, commission_rate_pct, priority_tier, allowed_task_kinds)
+    SELECT
+      slug, 'coding_agent',
+      CASE WHEN free_hosted = true THEN 15.00 ELSE 10.00 END,
+      CASE WHEN agentic = true AND tool_use = true THEN 1 ELSE 2 END,
+      ARRAY['code','research','financial','audit','deploy']
+    FROM coding_agents
+    WHERE active = true
+    ON CONFLICT (agent_slug, agent_type) DO NOTHING;
+  ELSE
+    RAISE NOTICE 'coding_agents table not found — skipping brokerage contract seed';
+  END IF;
+END $$;
 
--- Seed initial financial positions based on live DeFi yield data
-INSERT INTO financial_engineering_positions (strategy_type, strategy_name, protocol_slug, chain, asset_in, amount_deployed_usd, expected_yield_pct, evidence, risk_score)
-SELECT
-  'yield_farming',
-  'Auto-compound ' || symbol || ' on ' || chain,
-  protocol_slug,
-  chain,
-  'USDC',
-  LEAST(tvl_usd * 0.00001, 1000),
-  apy_pct,
-  jsonb_build_object('source','defi_yield_opportunities','pool',symbol,'tvl',tvl_usd),
-  CASE WHEN apy_pct > 50 THEN 5 WHEN apy_pct > 20 THEN 4 WHEN apy_pct > 10 THEN 3 ELSE 2 END
-FROM defi_yield_opportunities
-WHERE stablecoin = true AND tvl_usd >= 5000000 AND apy_pct >= 5
-ORDER BY apy_pct DESC
-LIMIT 8;
+-- Seed initial financial positions from DeFi yield data (guard: skip if table doesn't exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'defi_yield_opportunities') THEN
+    INSERT INTO financial_engineering_positions (strategy_type, strategy_name, protocol_slug, chain, asset_in, amount_deployed_usd, expected_yield_pct, evidence, risk_score)
+    SELECT
+      'yield_farming', 'Auto-compound ' || symbol || ' on ' || chain, protocol_slug, chain, 'USDC',
+      LEAST(tvl_usd * 0.00001, 1000), apy_pct,
+      jsonb_build_object('source','defi_yield_opportunities','pool',symbol,'tvl',tvl_usd),
+      CASE WHEN apy_pct > 50 THEN 5 WHEN apy_pct > 20 THEN 4 WHEN apy_pct > 10 THEN 3 ELSE 2 END
+    FROM defi_yield_opportunities
+    WHERE stablecoin = true AND tvl_usd >= 5000000 AND apy_pct >= 5
+    ORDER BY apy_pct DESC LIMIT 8;
+  END IF;
+END $$;
 
--- Seed arbitrage positions from cross-chain spreads
+-- Seed static arbitrage positions
 INSERT INTO financial_engineering_positions (strategy_type, strategy_name, chain, asset_in, asset_out, amount_deployed_usd, expected_yield_pct, evidence, risk_score)
 VALUES
   ('cross_chain_arb', 'USDC bridge arb Ethereum→Arbitrum', 'Arbitrum', 'USDC', 'USDC', 500, 2.5, '{"route":"Ethereum→Arbitrum","method":"bridge_spread"}'::jsonb, 2),
   ('cross_chain_arb', 'USDC bridge arb Ethereum→Base', 'Base', 'USDC', 'USDC', 500, 1.8, '{"route":"Ethereum→Base","method":"bridge_spread"}'::jsonb, 1),
   ('liquidity_provision', 'Stable LP on Aerodrome Base', 'Base', 'USDC', 'USDT', 1000, 12.5, '{"protocol":"aerodrome","pool":"USDC-USDT"}'::jsonb, 2),
   ('yield_stacking', 'Pendle PT fixed yield USDC', 'Arbitrum', 'USDC', 'PT-USDC', 2000, 8.2, '{"protocol":"pendle","maturity":"2026-09"}'::jsonb, 3),
-  ('restaking_yield', 'ether.fi eETH → EigenLayer restake', 'Ethereum', 'ETH', 'eETH', 5000, 6.8, '{"protocol":"eigenlayer","underlying":"ether-fi"}'::jsonb, 4);
+  ('restaking_yield', 'ether.fi eETH → EigenLayer restake', 'Ethereum', 'ETH', 'eETH', 5000, 6.8, '{"protocol":"eigenlayer","underlying":"ether-fi"}'::jsonb, 4)
+ON CONFLICT DO NOTHING;
