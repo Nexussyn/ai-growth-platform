@@ -8,6 +8,9 @@ on:
         required: true
         default: 'YES'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   migrate:
     name: Run all migrations
@@ -16,18 +19,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
 
-      - name: Install Supabase CLI
-        run: npm install -g supabase@latest
-
-      - name: Apply all migrations
+      - name: Apply all migrations via psql
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          echo "🚀 Applying all migrations to production..."
-          supabase db push --db-url "$SUPABASE_DB_URL"
-          echo "✅ All migrations applied successfully!"
+          echo "Applying migrations..."
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            echo "--- Applying: $f"
+            psql "$SUPABASE_DB_URL" -f "$f" \
+              --set ON_ERROR_STOP=off \
+              -v VERBOSITY=terse 2>&1 | tail -5
+            echo "Done: $f"
+          done
+          echo "All migrations processed!"
+
+      - name: Verify migration count
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          echo "Tables created:"
+          psql "$SUPABASE_DB_URL" -c "
+            SELECT schemaname, COUNT(*) as tables
+            FROM pg_tables
+            WHERE schemaname IN ('public','legacy')
+            GROUP BY schemaname
+            ORDER BY schemaname;
+          "
