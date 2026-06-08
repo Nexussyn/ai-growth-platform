@@ -1,24 +1,6 @@
 /*
   # Deep DeFi integration overview + opportunistic phase reaffirmation
-
-  1. New Function
-    - `defi_opportunistic_overview()` returns a single jsonb payload aggregating
-      every public-readable surface of the global DeFi integration:
-        - phase state (active/since/reason)
-        - latest defi_metrics_snapshot (TVL, stablecoin mcap, DEX 24h volume)
-        - protocol counts by category, top protocols
-        - top yield opportunities (stablecoin / non-stable, ranked by APY+TVL)
-        - top opportunistic signals (most recent / highest est_value_usd)
-        - chains seen across the network
-        - revenue_opportunities funnel counts
-
-  2. Phase Activation
-    - Reaffirms `opportunistic` phase state with an updated provenance reason that
-      reflects the deep DeFi wiring this migration finalizes.
-
-  3. Security
-    - Function is SECURITY DEFINER, search_path locked, EXECUTE granted to
-      anon/authenticated/service_role (read-only aggregation, no writes).
+  Fixed: guard set_system_phase call if function does not exist
 */
 
 CREATE OR REPLACE FUNCTION public.defi_opportunistic_overview()
@@ -158,7 +140,19 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.defi_opportunistic_overview() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.defi_opportunistic_overview() TO anon, authenticated, service_role;
 
-SELECT public.set_system_phase(
-  'opportunistic',
-  'Deep DeFi integration finalized: 24 protocols, 11 chains, $43B+ TVL tracked. Continuous yield, arbitrage, and revenue-signal capture active across all permissionless venues. Phase opportunistic reaffirmed by deep-integration migration.'
-);
+-- Guard: only call set_system_phase if the function exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'set_system_phase'
+  ) THEN
+    PERFORM public.set_system_phase(
+      'opportunistic',
+      'Deep DeFi integration finalized: 24 protocols, 11 chains, $43B+ TVL tracked. Continuous yield, arbitrage, and revenue-signal capture active across all permissionless venues. Phase opportunistic reaffirmed by deep-integration migration.'
+    );
+  ELSE
+    RAISE NOTICE 'set_system_phase not found — skipping phase reaffirmation';
+  END IF;
+END $$;
