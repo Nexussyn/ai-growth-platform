@@ -1,0 +1,25 @@
+run = "npm run dev"
+entrypoint = "src/main.tsx"
+modules = ["nodejs-20:v8-20230920-bd784b9"]
+
+hidden = [".config", "node_modules", "dist"]
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+run = ["sh", "-c", "npm run build && npx serve dist -l 3000"]
+deploymentTarget = "static"
+publicDir = "dist"
+
+[[ports]]
+localPort = 5173
+externalPort = 80
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
+
+[env]
+PATH = "/home/runner/$REPL_SLUG/.config/npm/node_global/bin:/home/runner/$REPL_SLUG/node_modules/.bin"
+npm_config_prefix = "/home/runner/$REPL_SLUG/.config/npm/node_global"
