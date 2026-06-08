@@ -10,7 +10,6 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SUPABASE_PROJECT_ID: kjtirbnxxymeumycrhqv
 
 jobs:
   migrate:
@@ -21,76 +20,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
         with:
-          python-version: '3.12'
+          version: latest
 
-      - name: Patch migration files
-        run: |
-          python3 << 'PYEOF'
-          import os, re, glob
-
-          files = sorted(glob.glob("supabase/migrations/*.sql"))
-          for path in files:
-              sql = open(path).read()
-              lines = sql.splitlines()
-              patched = []
-              for line in lines:
-                  # Before every CREATE POLICY "name", inject DROP POLICY IF EXISTS "name"
-                  m = re.match(r'(create\s+policy\s+)("[^"]+")(\s+on\s+)(\S+)', line, re.IGNORECASE)
-                  if m:
-                      policy_name = m.group(2)
-                      table_name  = m.group(4).rstrip(';')
-                      patched.append(f'DROP POLICY IF EXISTS {policy_name} ON {table_name};')
-                  patched.append(line)
-              # Also drop enforce_agent_cap trigger/function at top of every file
-              header = (
-                  "DROP TRIGGER IF EXISTS trg_enforce_agent_cap ON governed_agents CASCADE;\n"
-                  "DROP TRIGGER IF EXISTS enforce_agent_cap_trigger ON governed_agents CASCADE;\n"
-                  "DROP FUNCTION IF EXISTS enforce_agent_cap() CASCADE;\n"
-                  "DELETE FROM vault.secrets WHERE name IN ("
-                  "'supabase_project_url','supabase_service_role_key','openai_api_key',"
-                  "'anthropic_api_key','telegram_bot_token','owner_wallet_address',"
-                  "'stripe_secret_key','stripe_webhook_secret','supabase_anon_key',"
-                  "'together_api_key','cohere_api_key','groq_api_key','mistral_api_key',"
-                  "'huggingface_api_key','replicate_api_key','perplexity_api_key'"
-                  ");\n"
-              ) if 'vault.create_secret' in sql or 'enforce_agent_cap' in sql else ""
-              with open(path, 'w') as f:
-                  f.write(header + "\n".join(patched))
-          print(f"Patched {len(files)} migration files")
-          PYEOF
-
-      - name: Apply all migrations
+      - name: Apply migrations via Supabase CLI
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
-          SUCCESS=0
-          FAIL=0
-
-          for f in $(ls supabase/migrations/*.sql | sort); do
-            NAME=$(basename "$f" .sql)
-            SQL=$(cat "$f")
-            echo "--- $NAME"
-
-            HTTP_CODE=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
-              -X POST \
-              "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_ID}/database/query" \
-              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-              -H "Content-Type: application/json" \
-              --data-binary "$(jq -n --arg q "$SQL" '{query: $q}')")
-
-            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-              echo "  OK"
-              SUCCESS=$((SUCCESS+1))
-            else
-              MSG=$(python3 -c "import json; d=json.load(open('/tmp/resp.json')); print(d.get('message','?'))" 2>/dev/null || echo 'unknown')
-              echo "  FAIL: $MSG"
-              FAIL=$((FAIL+1))
-            fi
-          done
-
-          echo ""
-          echo "SUCCESS: $SUCCESS / FAIL: $FAIL"
-          [ "$FAIL" -eq 0 ] && echo "ALL 83 MIGRATIONS APPLIED!" || exit 1
+          supabase db push \
+            --project-ref kjtirbnxxymeumycrhqv \
+            --password "$SUPABASE_DB_PASSWORD"
