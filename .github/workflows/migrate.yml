@@ -15,6 +15,15 @@ jobs:
   migrate:
     name: Run all migrations
     runs-on: ubuntu-latest
+
+    env:
+      PGHOST: db.kjtirbnxxymeumycrhqv.supabase.co
+      PGPORT: 5432
+      PGDATABASE: postgres
+      PGUSER: postgres
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PGSSLMODE: require
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,29 +33,23 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client
 
-      - name: Apply all migrations via psql
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - name: Test connection
+        run: psql -c "SELECT version();"
+
+      - name: Apply all migrations
         run: |
           echo "Applying migrations..."
           for f in $(ls supabase/migrations/*.sql | sort); do
-            echo "--- Applying: $f"
-            psql "$SUPABASE_DB_URL" -f "$f" \
-              --set ON_ERROR_STOP=off \
-              -v VERBOSITY=terse 2>&1 | tail -5
-            echo "Done: $f"
+            echo "--- $f"
+            psql -v ON_ERROR_STOP=0 -f "$f" 2>&1 | grep -E '(ERROR|WARNING|CREATE|ALTER|INSERT|DROP|notice)' | head -10 || true
           done
-          echo "All migrations processed!"
+          echo "Done!"
 
-      - name: Verify migration count
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - name: Verify tables
         run: |
-          echo "Tables created:"
-          psql "$SUPABASE_DB_URL" -c "
+          psql -c "
             SELECT schemaname, COUNT(*) as tables
             FROM pg_tables
             WHERE schemaname IN ('public','legacy')
-            GROUP BY schemaname
-            ORDER BY schemaname;
+            GROUP BY schemaname;
           "
