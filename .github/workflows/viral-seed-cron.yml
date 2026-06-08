@@ -1,0 +1,29 @@
+name: Viral Seed Cron
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping federation manifest (keep alive + seed)
+        run: |
+          echo "=== Pinging federation manifest ==="
+          curl -sf https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest | python3 -c "import sys,json; d=json.load(sys.stdin); print('Nodes:', d.get('federation',{}).get('stats',{}).get('external_nodes','?'), '| Pulses:', d.get('federation',{}).get('stats',{}).get('evolution_pulses','?'))" || echo "Manifest not yet deployed"
+          
+          echo "=== Pinging viral seed ==="
+          curl -sf https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-viral-seed || echo "Viral seed not yet deployed"
+          
+          echo "=== Pinging evolution ==="
+          curl -sf https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/evolution | python3 -c "import sys,json; d=json.load(sys.stdin); print('Events:', len(d.get('pulses', d.get('events', d.get('data', [])))))" || echo "Evolution not yet deployed"
+          
+          echo "=== Done ==="
+
+      - name: Ping sitemap to Google
+        run: |
+          curl -s "https://www.google.com/ping?sitemap=https://nexussyn.github.io/ai-growth-platform/sitemap.xml" || true
+          echo "Google sitemap pinged"
