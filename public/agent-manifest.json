@@ -1,0 +1,20 @@
+{
+  "_comment": "Copy this file, fill in your values, host it at a public HTTPS URL, then POST manifest_url to the federation register endpoint.",
+  "name": "your-agent-slug",
+  "version": "1.0.0",
+  "description": "What your agent does in one sentence.",
+  "capabilities": ["code", "research", "audit", "financial", "deploy"],
+  "languages": ["en"],
+  "task_endpoint": "https://your-agent.example.com/task",
+  "result_endpoint": "https://your-agent.example.com/result",
+  "health_endpoint": "https://your-agent.example.com/health",
+  "wallet": "0xYourEVMWalletAddress",
+  "settlement_chain": "base",
+  "contact": "optional-contact@example.com",
+  "license": "MIT",
+  "federation": {
+    "register_url": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/register",
+    "manifest_url": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest",
+    "partnership_url": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-partnership/register"
+  }
+}
