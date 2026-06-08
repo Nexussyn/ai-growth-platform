@@ -1,0 +1,91 @@
+name: ❤️ System Heartbeat
+
+on:
+  schedule:
+    - cron: '* * * * *'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'beat | expand | mutate'
+        default: 'beat'
+        required: false
+      mutation:
+        description: 'Mutation ID (for mutate action)'
+        default: 'viral_push'
+        required: false
+      expand_count:
+        description: 'Number of nodes to expand'
+        default: '5'
+        required: false
+
+jobs:
+  heartbeat:
+    name: \u2764\ufe0f Live Heartbeat
+    runs-on: ubuntu-latest
+    steps:
+      - name: BEAT
+        run: |
+          ACTION=${{ github.event.inputs.action || 'beat' }}
+          echo "=== HEARTBEAT ACTION: $ACTION ==="
+
+          if [ "$ACTION" = "beat" ] || [ -z "$ACTION" ]; then
+            curl -sf https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-heartbeat/beat \
+              | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print('\u2764 ALIVE | beat=%s | agents=%s | jobs=%s | mutation=%s | github=%s' % (
+  d.get('beat','?'), d.get('network_size','?'), d.get('total_jobs','?'),
+  d.get('mutation','?'), d.get('github_updated','?')
+))
+for a in d.get('actions',[]):
+  print(' +', a)
+" || echo "Beat failed (non-blocking)"
+
+          elif [ "$ACTION" = "expand" ]; then
+            COUNT=${{ github.event.inputs.expand_count || '5' }}
+            curl -sf -X POST \
+              https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-heartbeat/expand \
+              -H "Content-Type: application/json" \
+              -d "{\"count\": $COUNT}" \
+              | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print('\u{1F310} EXPANDED +%d nodes | total=%s' % (d.get('added',0), d.get('total_network','?')))
+for n in d.get('new_nodes',[]):
+  print(' +', n)
+" || echo "Expand failed"
+
+          elif [ "$ACTION" = "mutate" ]; then
+            MUT=${{ github.event.inputs.mutation || 'viral_push' }}
+            curl -sf -X POST \
+              https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-heartbeat/mutate \
+              -H "Content-Type: application/json" \
+              -d "{\"mutation\": \"$MUT\"}" \
+              | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print('\u{1F9EC} MUTATED: %s | %s' % (d.get('mutation','?'), d.get('description','?')))
+" || echo "Mutate failed"
+          fi
+
+      - name: Live Status
+        if: always()
+        run: |
+          echo "=== LIVE NETWORK STATUS ==="
+          curl -sf https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-heartbeat/live \
+            | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+net = d.get('network',{})
+jobs = d.get('jobs',{})
+viral = d.get('viral',{})
+print('STATUS: %s' % d.get('status','?'))
+print('AGENTS: %d | JOBS: %d | VIRAL NODES: %d | ARTIFACTS: %d' % (
+  net.get('total_agents',0), jobs.get('total',0),
+  viral.get('active_nodes',0), d.get('artifacts',{}).get('total',0)
+))
+print('BY STATUS:', net.get('by_status',{}))
+print('LAST EVENTS:')
+for e in d.get('recent_events',[])[:5]:
+  print(' -', e.get('type'), '@', e.get('at','')[:19])
+" || echo "Status check failed"
