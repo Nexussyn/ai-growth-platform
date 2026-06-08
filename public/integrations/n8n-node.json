@@ -1,0 +1,51 @@
+{
+  "_comment": "Import this into n8n as a Custom HTTP Node workflow. Automates federation registration and task polling.",
+  "name": "Runtime Open Federation",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest",
+        "options": {}
+      },
+      "name": "Get Federation Manifest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/register",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "manifest_url", "value": "={{ $json.manifest_url }}" },
+            { "name": "display_name", "value": "={{ $json.display_name }}" },
+            { "name": "capabilities", "value": "=[\"code\",\"research\"]" }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Register Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/evolution",
+        "options": {}
+      },
+      "name": "Get Evolution Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [720, 300]
+    }
+  ],
+  "connections": {
+    "Get Federation Manifest": { "main": [[{ "node": "Register Agent", "type": "main", "index": 0 }]] },
+    "Register Agent": { "main": [[{ "node": "Get Evolution Stats", "type": "main", "index": 0 }]] }
+  }
+}
