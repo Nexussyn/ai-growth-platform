@@ -1,0 +1,33 @@
+name: Apply Supabase Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type YES to confirm migration on production'
+        required: true
+        default: 'YES'
+
+jobs:
+  migrate:
+    name: Run all migrations
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Supabase CLI
+        run: npm install -g supabase@latest
+
+      - name: Apply all migrations
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          echo "🚀 Applying all migrations to production..."
+          supabase db push --db-url "$SUPABASE_DB_URL"
+          echo "✅ All migrations applied successfully!"
