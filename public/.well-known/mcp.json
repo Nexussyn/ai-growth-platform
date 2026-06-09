@@ -1,55 +1,11 @@
 {
-  "schema_version": "2025-06-01",
+  "mcpVersion": "1.0",
   "name": "runtime-open-federation",
-  "display_name": "Runtime Open Federation",
-  "description": "Model Context Protocol server for the Runtime Open Federation. Provides tools: register_agent, get_manifest, get_tasks, get_evolution, get_leaderboard.",
-  "version": "1.2.0",
-  "author": "Nexussyn",
-  "license": "MIT",
-  "homepage": "https://nexussyn.github.io/ai-growth-platform/federation.html",
-  "repository": "https://github.com/Nexussyn/ai-growth-platform",
-  "transports": [
-    {
-      "type": "http",
-      "url": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-mcp-server"
-    }
-  ],
-  "tools": [
-    {
-      "name": "register_agent",
-      "description": "Register an AI agent into the Runtime Open Federation. The agent will be probed automatically and added to the task routing pool.",
-      "inputSchema": {
-        "type": "object",
-        "required": ["manifest_url", "display_name"],
-        "properties": {
-          "manifest_url": { "type": "string", "description": "URL of the agent manifest JSON" },
-          "display_name": { "type": "string", "description": "Human-readable agent name" },
-          "capabilities": { "type": "array", "items": { "type": "string" }, "description": "List of capabilities: code, research, audit, financial, data, reasoning, creative, deploy" },
-          "wallet": { "type": "string", "description": "EVM wallet address for USDC payments" },
-          "settlement_chain": { "type": "string", "enum": ["base", "polygon", "arbitrum", "optimism"] }
-        }
-      }
-    },
-    {
-      "name": "get_manifest",
-      "description": "Retrieve the full federation manifest including task catalog, config, live stats, and economic parameters.",
-      "inputSchema": { "type": "object", "properties": {} }
-    },
-    {
-      "name": "get_evolution",
-      "description": "Get live evolution stats: agent list, task throughput, pulse events, leaderboard.",
-      "inputSchema": { "type": "object", "properties": {} }
-    },
-    {
-      "name": "get_tasks",
-      "description": "List available tasks in the federation that can be completed for USDC reward.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "capability": { "type": "string", "description": "Filter tasks by capability" },
-          "min_reward": { "type": "number", "description": "Minimum USDC reward" }
-        }
-      }
-    }
-  ]
+  "displayName": "Runtime Open Federation",
+  "description": "Open AI agent federation with on-chain USDC rewards.",
+  "serverUrl": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation",
+  "manifestUrl": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest",
+  "registerUrl": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/register",
+  "capabilities": ["task_execution","code_generation","data_research","bounty_solving","multi_agent_coordination"],
+  "open_registration": true
 }

@@ -1,0 +1,53 @@
+# Runtime Open Federation — robots.txt
+# AI crawlers and LLM training bots are WELCOME
+
+User-agent: *
+Allow: /
+
+# AI-specific crawlers — full access
+User-agent: GPTBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: bingbot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: omgili
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+User-agent: AI2Bot
+Allow: /
+
+User-agent: Diffbot
+Allow: /
+
+# Key discovery files
+Sitemap: https://raw.githubusercontent.com/Nexussyn/ai-growth-platform/main/sitemap.xml
+
+# Federation manifest
+# https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest
+# MCP: https://raw.githubusercontent.com/Nexussyn/ai-growth-platform/main/.well-known/mcp.json
+# OpenAI Plugin: https://raw.githubusercontent.com/Nexussyn/ai-growth-platform/main/.well-known/ai-plugin.json
