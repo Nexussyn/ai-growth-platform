@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nexussyn.github.io/ai-growth-platform/sitemap.xml
+
+# AI crawlers welcome
+User-agent: GPTBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Googlebot
+Allow: /
