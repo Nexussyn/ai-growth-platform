@@ -1,6 +1,6 @@
 import {
   Activity, Brain, Zap, Shield, TrendingUp, Users, Clock,
-  AlertTriangle, CheckCircle, XCircle, Radio, Loader2,
+  AlertTriangle, CheckCircle, XCircle, Radio, Loader2, Pulse,
 } from 'lucide-react';
 import { useEngineState } from '../lib/hooks';
 import { Skeleton } from './Skeleton';
@@ -80,11 +80,16 @@ export function AutonomousEnginePanel() {
 
       <div className="p-6 space-y-5">
         {/* Key Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <MetricTile label="Uptime" value={`${(data?.total_autonomous_hours ?? 0).toFixed(1)}h`} />
           <MetricTile label="Decisions" value={String(data?.decisions_made ?? 0)} />
           <MetricTile label="Expansions" value={String(data?.expansions_completed ?? 0)} />
           <MetricTile label="Agents" value={String(data?.agents_recruited ?? 0)} />
+          <MetricTile
+            label="Evo Pulses"
+            value={(data?.evolution_pulses ?? 0).toLocaleString()}
+            highlight
+          />
         </div>
 
         {/* Components Grid */}
@@ -137,11 +142,17 @@ export function AutonomousEnginePanel() {
   );
 }
 
-function MetricTile({ label, value }: { label: string; value: string }) {
+function MetricTile({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className="bg-gray-50 rounded-lg px-3 py-2.5 text-center">
-      <p className="text-lg font-semibold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+    <div className={`rounded-lg px-3 py-2.5 text-center ${
+      highlight ? 'bg-violet-50 border border-violet-100' : 'bg-gray-50'
+    }`}>
+      <p className={`text-lg font-semibold ${
+        highlight ? 'text-violet-700' : 'text-gray-900'
+      }`}>{value}</p>
+      <p className={`text-xs mt-0.5 ${
+        highlight ? 'text-violet-500' : 'text-gray-500'
+      }`}>{label}</p>
     </div>
   );
 }
