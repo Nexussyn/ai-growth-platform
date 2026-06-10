@@ -721,6 +721,7 @@ interface ProfitHuntResult {
   active_routes: number;
   pivots: number;
   archived: number;
+  replaced: number;
   best_score: number;
   best_title: string;
 }
@@ -1365,8 +1366,35 @@ Deno.serve(async (request: Request) => {
       const m = await getAllMetrics();
       return json({ global_profit_hunt_enabled: true, opportunity_scanning_enabled: true, aggressive_pivoting_enabled: true, product_attachment: false, monetization_locked: true, compliance_guardrail_enabled: true, opportunities: opps, archived_opportunities: archived, routes, hunt_log: huntLog, metrics: { discovered: m.opportunities_discovered ?? 0, validated: m.opportunities_validated ?? 0, rejected: m.opportunities_rejected ?? 0, archived: m.opportunities_archived ?? 0, active_routes: m.revenue_routes_active ?? 0, hunt_cycles: m.profit_hunt_cycles ?? 0, pivots_executed: m.pivots_executed ?? 0, best_score: m.best_opportunity_score ?? 0 } });
     }
+    if (path === "/engine/state") {
+      const m = await getAllMetrics();
+      const h = await getSubsystemHealth();
+      const degraded = Object.values(h).filter(s => s.status !== "healthy");
+      return json({
+        mode: MODE,
+        scheduler_tick: m.scheduler_ticks ?? 0,
+        scaling_phase_active: (m.scaling_phase_active ?? 0) >= 1,
+        phase_gate_passed: (m.phase_gate_passed ?? 0) >= 1,
+        monetization_locked: (m.monetization_gate_open ?? 0) === 0,
+        validation_score: m.validation_score ?? 0,
+        self_healing: {
+          degraded_subsystems: degraded.map(s => ({ name: s.name, status: s.status })),
+          auto_recoveries: m.auto_recoveries ?? 0,
+        },
+        opportunistic: {
+          hunt_cycles: m.profit_hunt_cycles ?? 0,
+          best_score: m.best_opportunity_score ?? 0,
+          active_routes: m.revenue_routes_active ?? 0,
+          pivots_executed: m.pivots_executed ?? 0,
+        },
+        last_heartbeat_epoch: m.last_heartbeat_epoch ?? 0,
+        idle_seconds: (m.last_heartbeat_epoch ?? 0) > 0
+          ? Math.floor(Date.now() / 1000) - (m.last_heartbeat_epoch ?? 0)
+          : 0,
+      });
+    }
     if (path === "/config") return json({ validation: VALIDATION_CONFIG, safety: SAFETY_CONFIG, overflow: OVERFLOW_CONFIG, healing: HEALING_CONFIG, phase_gate: PHASE_GATE_CONFIG });
-    return json({ error: "not_found", endpoints: ["/dashboard","/cycle","/cycle-once","/start","/stop","/agents","/connectors","/events","/projections","/deliveries","/dlq","/dlq/stats","/overflow","/subsystems","/health","/feedback/positive","/feedback/negative","/user/register","/validation","/profit-plan","/phase-gate","/benchmarks","/telegram","/safety","/verify","/receipts","/opportunities","/config"] }, 404);
+    return json({ error: "not_found", endpoints: ["/dashboard","/cycle","/cycle-once","/start","/stop","/agents","/connectors","/events","/projections","/deliveries","/dlq","/dlq/stats","/overflow","/subsystems","/health","/feedback/positive","/feedback/negative","/user/register","/validation","/profit-plan","/phase-gate","/benchmarks","/telegram","/safety","/verify","/receipts","/opportunities","/engine/state","/config"] }, 404);
   } catch (err) { return json({ error: err instanceof Error ? err.message : "internal_error" }, 500); }
 });
 
