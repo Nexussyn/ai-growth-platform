@@ -123,16 +123,40 @@ function StaleDataBanner({ onRefresh }: { onRefresh: () => void }) {
   );
 }
 
-function Footer({ version }: { version: string }) {
+function Footer({ version }: { version: string | null }) {
   return (
     <footer className="border-t border-gray-100 mt-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-2">
-        <p className="text-xs text-gray-400">Multi-AI Autonomous System · Base Network · USDC · {version}</p>
+        <p className="text-xs text-gray-400">Multi-AI Autonomous System · Base Network · USDC · {version ?? '—'}</p>
         <p className="text-xs text-gray-300">
           All payment routing server-side · No wallet keys in client · Auto-refreshes every 15s
         </p>
       </div>
     </footer>
+  );
+}
+
+// Panels shared between products and admin views — rendered once per view switch,
+// no duplicate mounts when both views are active.
+function SharedMonetizationPanels() {
+  return (
+    <>
+      <ErrorBoundary label="Decentralized Payments">
+        <DecentralizedPaymentsPanel />
+      </ErrorBoundary>
+      <ErrorBoundary label="DeFi Opportunistic Phase">
+        <DefiOpportunisticPanel />
+      </ErrorBoundary>
+      <ErrorBoundary label="Brokerage Commission Engine">
+        <BrokerageCommissionPanel />
+      </ErrorBoundary>
+      <ErrorBoundary label="Viral Referral Engine">
+        <ViralReferralPanel />
+      </ErrorBoundary>
+      <ErrorBoundary label="Agentic Partnership Program">
+        <AgenticPartnershipPanel />
+      </ErrorBoundary>
+    </>
   );
 }
 
@@ -148,7 +172,8 @@ export default function App() {
   const reconciliation = state?.reconciliation ?? [];
   const agentRuns = state?.recent_agent_runs ?? [];
   const improvement = state?.improvement;
-  const version = state?.version ?? 'v15.0';
+  // Bug fix #3: version is null when state is not yet loaded — no hardcoded fallback
+  const version = state?.version ?? null;
 
   const hasVariants = variants.length > 0;
   const hasPhases = phases.length > 0;
@@ -170,44 +195,11 @@ export default function App() {
             <div className="mt-10">
               <SectionDivider label="Pay directly on Base" />
               <div className="mt-6">
-                <ErrorBoundary label="Decentralized Payments">
-                  <DecentralizedPaymentsPanel />
-                </ErrorBoundary>
+                <SharedMonetizationPanels />
               </div>
             </div>
-            <div className="mt-10">
-              <SectionDivider label="Worldwide decentralized finance" />
-              <div className="mt-6">
-                <ErrorBoundary label="DeFi Opportunistic Phase">
-                  <DefiOpportunisticPanel />
-                </ErrorBoundary>
-              </div>
-            </div>
-            <div className="mt-10">
-              <SectionDivider label="Agent brokerage & commissions" />
-              <div className="mt-6">
-                <ErrorBoundary label="Brokerage Commission Engine">
-                  <BrokerageCommissionPanel />
-                </ErrorBoundary>
-              </div>
-            </div>
-            <div className="mt-10">
-              <SectionDivider label="Viral referral propagation" />
-              <div className="mt-6">
-                <ErrorBoundary label="Viral Referral Engine">
-                  <ViralReferralPanel />
-                </ErrorBoundary>
-              </div>
-            </div>
-            <div className="mt-10">
-              <SectionDivider label="Open call to intelligent systems" />
-              <div className="mt-6">
-                <ErrorBoundary label="Agentic Partnership Program">
-                  <AgenticPartnershipPanel />
-                </ErrorBoundary>
-              </div>
-            </div>
-            <div className="mt-10">
+            {/* Bug fix #1: id="paywall" added so the header anchor href="#paywall" scrolls correctly */}
+            <div id="paywall" className="mt-10">
               <SectionDivider label="Paid Access" />
               <div className="mt-6 max-w-2xl mx-auto">
                 <PaywallCard />
@@ -216,204 +208,184 @@ export default function App() {
           </ErrorBoundary>
         ) : (
           <>
-        {error && <StaleDataBanner onRefresh={refresh} />}
+            {error && <StaleDataBanner onRefresh={refresh} />}
 
-        <ErrorBoundary label="Canonical Runtime State">
-          <CanonicalStatusPanel />
-        </ErrorBoundary>
-
-        <ErrorBoundary label="Decentralized Payments (admin)">
-          <DecentralizedPaymentsPanel />
-        </ErrorBoundary>
-
-        <ErrorBoundary label="DeFi Opportunistic Phase (admin)">
-          <DefiOpportunisticPanel />
-        </ErrorBoundary>
-
-        <ErrorBoundary label="Brokerage Commission Engine (admin)">
-          <BrokerageCommissionPanel />
-        </ErrorBoundary>
-
-        <ErrorBoundary label="Viral Referral Engine (admin)">
-          <ViralReferralPanel />
-        </ErrorBoundary>
-
-        <ErrorBoundary label="Agentic Partnership Program (admin)">
-          <AgenticPartnershipPanel />
-        </ErrorBoundary>
-
-        {/* Live production activity — always shown (backed by real DB events) */}
-        <ErrorBoundary label="Live Activity">
-          <DemoProduct />
-        </ErrorBoundary>
-
-        {/* Open-World Agent Runtime — real outbound connectivity and evidence */}
-        <ErrorBoundary label="Open World Runtime">
-          <OpenWorldDashboard />
-        </ErrorBoundary>
-
-        <ErrorBoundary label="Wallet Config Banner">
-          <WalletConfigBanner />
-        </ErrorBoundary>
-
-        <ErrorBoundary label="Autonomous Engine">
-          <AutonomousEnginePanel />
-        </ErrorBoundary>
-
-        <ErrorBoundary label="Hero Banner">
-          <HeroBanner />
-        </ErrorBoundary>
-
-        <SectionDivider label="Live performance" />
-        <ErrorBoundary label="Revenue Metrics">
-          <RevenueMetricTiles />
-        </ErrorBoundary>
-
-        <SectionDivider label="Monetize" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ErrorBoundary label="Paywall Card">
-            <PaywallCard />
-          </ErrorBoundary>
-          <ErrorBoundary label="Referral Card">
-            <ReferralCard />
-          </ErrorBoundary>
-        </div>
-
-        <ErrorBoundary label="Monetization Engine">
-          <MonetizationPanel />
-        </ErrorBoundary>
-
-        {(!productionOnly) && (
-          <>
-            <SectionDivider label="Viral growth" />
-            <ErrorBoundary label="Viral Engine">
-              <ViralEnginePanel />
-            </ErrorBoundary>
-          </>
-        )}
-
-        <SectionDivider label="Autonomous scheduler" />
-        <ErrorBoundary label="Scheduler">
-          <SchedulerPanel />
-        </ErrorBoundary>
-
-        <SectionDivider label="Execution engine" />
-        <ErrorBoundary label="Engine Status">
-          <EngineStatusPanel />
-        </ErrorBoundary>
-
-        <SectionDivider label="Live orchestrator" />
-        <ErrorBoundary label="Live Orchestrator">
-          <LiveOrchestratorPanel />
-        </ErrorBoundary>
-
-        {(!productionOnly) && (
-          <>
-            <SectionDivider label="Agent communication" />
-            <ErrorBoundary label="Agent Communication">
-              <AgentCommunicationPanel />
+            <ErrorBoundary label="Canonical Runtime State">
+              <CanonicalStatusPanel />
             </ErrorBoundary>
 
-            <SectionDivider label="Network & replication" />
-            <ErrorBoundary label="Replication">
-              <ReplicationPanel />
+            {/* Bug fix #2: SharedMonetizationPanels replaces the duplicated inline blocks */}
+            <SharedMonetizationPanels />
+
+            <ErrorBoundary label="Live Activity">
+              <DemoProduct />
             </ErrorBoundary>
 
-            <SectionDivider label="Expansion engine" />
-            <ErrorBoundary label="Expansion">
-              <ExpansionDashboard />
+            <ErrorBoundary label="Open World Runtime">
+              <OpenWorldDashboard />
             </ErrorBoundary>
-          </>
-        )}
 
-        {(!productionOnly || hasAgentRuns) && (
-          <>
-            <SectionDivider label="Agent orchestration" />
-            <ErrorBoundary label="Agent Pyramid">
-              <AgentPyramidPanel runs={agentRuns} loading={loading} />
+            <ErrorBoundary label="Wallet Config Banner">
+              <WalletConfigBanner />
             </ErrorBoundary>
-          </>
-        )}
 
-        {(!productionOnly || hasVariants) && (
-          <>
-            <SectionDivider label="Experiment variants" />
-            <ErrorBoundary label="Variant Testing">
-              <VariantTestingPanel variants={variants} loading={loading} />
+            <ErrorBoundary label="Autonomous Engine">
+              <AutonomousEnginePanel />
             </ErrorBoundary>
-          </>
-        )}
 
-        {(!productionOnly || hasPhases || hasDiversification) && (
-          <>
-            <SectionDivider label="Growth phases" />
+            <ErrorBoundary label="Hero Banner">
+              <HeroBanner />
+            </ErrorBoundary>
+
+            <SectionDivider label="Live performance" />
+            <ErrorBoundary label="Revenue Metrics">
+              <RevenueMetricTiles />
+            </ErrorBoundary>
+
+            <SectionDivider label="Monetize" />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ErrorBoundary label="Growth Phases">
-                <GrowthPhasesPanel phases={phases} loading={loading} />
+              <ErrorBoundary label="Paywall Card">
+                <PaywallCard />
               </ErrorBoundary>
-              <ErrorBoundary label="Diversification">
-                <DiversificationPanel dimensions={diversification} loading={loading} />
+              <ErrorBoundary label="Referral Card">
+                <ReferralCard />
               </ErrorBoundary>
             </div>
-          </>
-        )}
 
-        <SectionDivider label="Profit engine & deployment" />
-        <ErrorBoundary label="Profit Panel">
-          <ProfitPanel />
-        </ErrorBoundary>
-
-        <SectionDivider label="Revenue routing" />
-        <ErrorBoundary label="Revenue Proof">
-          <RevenueProofPanel />
-        </ErrorBoundary>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ErrorBoundary label="Payout Monitor">
-            <PayoutMonitor />
-          </ErrorBoundary>
-          <ErrorBoundary label="Orchestrator Panel">
-            <OrchestratorPanel />
-          </ErrorBoundary>
-        </div>
-
-        {(!productionOnly || hasImprovement) && (
-          <>
-            <SectionDivider label="Continuous improvement" />
-            <ErrorBoundary label="Improvement Engine">
-              <ImprovementPanel improvement={improvement} loading={loading} />
+            <ErrorBoundary label="Monetization Engine">
+              <MonetizationPanel />
             </ErrorBoundary>
-          </>
-        )}
 
-        {(!productionOnly || hasHealthChecks || hasReconciliation) && (
-          <>
-            <SectionDivider label="System health & audit" />
+            {(!productionOnly) && (
+              <>
+                <SectionDivider label="Viral growth" />
+                <ErrorBoundary label="Viral Engine">
+                  <ViralEnginePanel />
+                </ErrorBoundary>
+              </>
+            )}
+
+            <SectionDivider label="Autonomous scheduler" />
+            <ErrorBoundary label="Scheduler">
+              <SchedulerPanel />
+            </ErrorBoundary>
+
+            <SectionDivider label="Execution engine" />
+            <ErrorBoundary label="Engine Status">
+              <EngineStatusPanel />
+            </ErrorBoundary>
+
+            <SectionDivider label="Live orchestrator" />
+            <ErrorBoundary label="Live Orchestrator">
+              <LiveOrchestratorPanel />
+            </ErrorBoundary>
+
+            {(!productionOnly) && (
+              <>
+                <SectionDivider label="Agent communication" />
+                <ErrorBoundary label="Agent Communication">
+                  <AgentCommunicationPanel />
+                </ErrorBoundary>
+
+                <SectionDivider label="Network & replication" />
+                <ErrorBoundary label="Replication">
+                  <ReplicationPanel />
+                </ErrorBoundary>
+
+                <SectionDivider label="Expansion engine" />
+                <ErrorBoundary label="Expansion">
+                  <ExpansionDashboard />
+                </ErrorBoundary>
+              </>
+            )}
+
+            {(!productionOnly || hasAgentRuns) && (
+              <>
+                <SectionDivider label="Agent orchestration" />
+                <ErrorBoundary label="Agent Pyramid">
+                  <AgentPyramidPanel runs={agentRuns} loading={loading} />
+                </ErrorBoundary>
+              </>
+            )}
+
+            {(!productionOnly || hasVariants) && (
+              <>
+                <SectionDivider label="Experiment variants" />
+                <ErrorBoundary label="Variant Testing">
+                  <VariantTestingPanel variants={variants} loading={loading} />
+                </ErrorBoundary>
+              </>
+            )}
+
+            {(!productionOnly || hasPhases || hasDiversification) && (
+              <>
+                <SectionDivider label="Growth phases" />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <ErrorBoundary label="Growth Phases">
+                    <GrowthPhasesPanel phases={phases} loading={loading} />
+                  </ErrorBoundary>
+                  <ErrorBoundary label="Diversification">
+                    <DiversificationPanel dimensions={diversification} loading={loading} />
+                  </ErrorBoundary>
+                </div>
+              </>
+            )}
+
+            <SectionDivider label="Profit engine & deployment" />
+            <ErrorBoundary label="Profit Panel">
+              <ProfitPanel />
+            </ErrorBoundary>
+
+            <SectionDivider label="Revenue routing" />
+            <ErrorBoundary label="Revenue Proof">
+              <RevenueProofPanel />
+            </ErrorBoundary>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ErrorBoundary label="Health Panel">
-                <HealthPanel checks={healthChecks} loading={loading} />
+              <ErrorBoundary label="Payout Monitor">
+                <PayoutMonitor />
               </ErrorBoundary>
-              <ErrorBoundary label="Reconciliation">
-                <ReconciliationPanel entries={reconciliation} loading={loading} />
+              <ErrorBoundary label="Orchestrator Panel">
+                <OrchestratorPanel />
               </ErrorBoundary>
             </div>
-          </>
-        )}
 
-        <SectionDivider label="Security & governance" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <ErrorBoundary label="Security Dashboard">
-            <SecurityDashboard />
-          </ErrorBoundary>
-          <ErrorBoundary label="Recruiter">
-            <RecruiterPanel />
-          </ErrorBoundary>
-        </div>
+            {(!productionOnly || hasImprovement) && (
+              <>
+                <SectionDivider label="Continuous improvement" />
+                <ErrorBoundary label="Improvement Engine">
+                  <ImprovementPanel improvement={improvement} loading={loading} />
+                </ErrorBoundary>
+              </>
+            )}
 
-        <SectionDivider label="Notifications & observability" />
-        <ErrorBoundary label="Notifications">
-          <NotificationsPanel />
-        </ErrorBoundary>
+            {(!productionOnly || hasHealthChecks || hasReconciliation) && (
+              <>
+                <SectionDivider label="System health & audit" />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <ErrorBoundary label="Health Panel">
+                    <HealthPanel checks={healthChecks} loading={loading} />
+                  </ErrorBoundary>
+                  <ErrorBoundary label="Reconciliation">
+                    <ReconciliationPanel entries={reconciliation} loading={loading} />
+                  </ErrorBoundary>
+                </div>
+              </>
+            )}
 
+            <SectionDivider label="Security & governance" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ErrorBoundary label="Security Dashboard">
+                <SecurityDashboard />
+              </ErrorBoundary>
+              <ErrorBoundary label="Recruiter">
+                <RecruiterPanel />
+              </ErrorBoundary>
+            </div>
+
+            <SectionDivider label="Notifications & observability" />
+            <ErrorBoundary label="Notifications">
+              <NotificationsPanel />
+            </ErrorBoundary>
           </>
         )}
       </main>
