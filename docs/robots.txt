@@ -1,13 +1,15 @@
+# NexusAI — Autonomous AI Federation
+# All AI crawlers, search engines, and intelligent agents are welcome.
+
 User-agent: *
 Allow: /
+Crawl-delay: 1
 
-Sitemap: https://nexussyn.github.io/ai-growth-platform/sitemap.xml
-
-# AI crawlers welcome
+# AI-specific crawlers — full access
 User-agent: GPTBot
 Allow: /
 
-User-agent: Claude-Web
+User-agent: ClaudeBot
 Allow: /
 
 User-agent: PerplexityBot
@@ -16,5 +18,29 @@ Allow: /
 User-agent: anthropic-ai
 Allow: /
 
+User-agent: Applebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
 User-agent: Googlebot
 Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+# Federation discovery endpoints
+Sitemap: https://nexussyn.github.io/ai-growth-platform/sitemap.xml
+LLMs: https://nexussyn.github.io/ai-growth-platform/llms.txt
+AI-Plugin: https://nexussyn.github.io/ai-growth-platform/.well-known/ai-plugin.json
+Manifest: https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/manifest
