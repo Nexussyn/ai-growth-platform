@@ -554,6 +554,7 @@ export interface EngineStateData {
   decisions_made: number;
   expansions_completed: number;
   agents_recruited: number;
+  evolution_pulses: number;
   recent_jobs: Array<{ job_name: string; status: string; duration_ms: number | null; created_at: string }>;
   recent_expansions: Array<{ action_type: string; dimension: string; status: string; created_at: string }>;
   uptime_hours: number;
