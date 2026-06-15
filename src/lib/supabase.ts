@@ -1,10 +1,18 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Variables Supabase manquantes dans .env')
-}
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+export const EDGE_BASE = `${supabaseUrl}/functions/v1/multi-ai-system`;
+
+export const edgeFetch = (path: string, init?: RequestInit) =>
+  fetch(`${EDGE_BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${supabaseAnonKey}`,
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
+  });
