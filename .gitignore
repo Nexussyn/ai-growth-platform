@@ -20,6 +20,18 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets — NE JAMAIS committer
 .env
-.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+.supabase
+service-account*.json
+*.secret
+
 *.zip
