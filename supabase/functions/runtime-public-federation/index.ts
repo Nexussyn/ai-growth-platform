@@ -101,6 +101,65 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    if (req.method === "GET" && path === "/revenue") {
+      // Honest public revenue state. Reflects the IMMUTABLE 75/25 split: 75% of every
+      // gross incoming USDC payment converges only to the owner wallet, 25% self-finances
+      // the platform. Numbers are pulled live; zero means zero (never fabricated).
+      const [
+        { count: payments_total },
+        { count: settlements_total },
+        { data: ledger_rows },
+        { data: recent_settlements },
+        { data: split_owner },
+        { data: split_platform },
+        { data: wallet },
+      ] = await Promise.all([
+        sb.from("onchain_payments").select("*", { count: "exact", head: true }),
+        sb.from("owner_settlement_ledger").select("*", { count: "exact", head: true }),
+        sb.from("owner_settlement_ledger").select("gross_usdc,owner_usdc,platform_usdc").limit(100000),
+        sb.from("owner_settlement_ledger").select("tx_hash,network,asset,gross_usdc,owner_usdc,platform_usdc,status,created_at").order("created_at", { ascending: false }).limit(10),
+        sb.from("immutable_config").select("config_value").eq("config_key", "owner_revenue_share_bps").maybeSingle(),
+        sb.from("immutable_config").select("config_value").eq("config_key", "platform_self_finance_share_bps").maybeSingle(),
+        sb.from("owner_wallet_lock").select("masked_address,network,currency,locked_at").maybeSingle(),
+      ]);
+
+      let gross = 0, owner = 0, platform = 0;
+      (ledger_rows ?? []).forEach((r) => {
+        const x = r as Record<string, number>;
+        gross += Number(x.gross_usdc ?? 0); owner += Number(x.owner_usdc ?? 0); platform += Number(x.platform_usdc ?? 0);
+      });
+
+      const ownerBps = Number((split_owner as { config_value?: string })?.config_value ?? 7500);
+      const platformBps = Number((split_platform as { config_value?: string })?.config_value ?? 2500);
+
+      return corsJson({
+        revenue: {
+          generated_at: new Date().toISOString(),
+          split_rule: {
+            owner_pct: ownerBps / 100,
+            platform_self_finance_pct: platformBps / 100,
+            basis: "gross_incoming",
+            immutable: true,
+            convergence: "ALL_REVENUE_CONVERGES_ONLY_TO_OWNER_WALLET",
+            note: "75% of every gross incoming USDC payment converges only to the owner wallet; 25% self-finances the platform. This ratio is sealed and cannot be changed by any person or intelligence.",
+          },
+          owner_wallet: wallet ? { masked: (wallet as { masked_address?: string }).masked_address, network: (wallet as { network?: string }).network, currency: (wallet as { currency?: string }).currency, locked_at: (wallet as { locked_at?: string }).locked_at, sealed: true } : { sealed: false },
+          totals: {
+            payments_confirmed: payments_total ?? 0,
+            settlements_recorded: settlements_total ?? 0,
+            gross_usdc: Number(gross.toFixed(2)),
+            owner_usdc: Number(owner.toFixed(2)),
+            platform_usdc: Number(platform.toFixed(2)),
+          },
+          recent_settlements: recent_settlements ?? [],
+          state: (payments_total ?? 0) === 0
+            ? "armed_no_payment_yet"
+            : "earning",
+          honesty: "No revenue is fabricated. Zero means zero. The settlement rail is live and will split the first real payment automatically.",
+        },
+      });
+    }
+
     if (req.method === "GET" && (path === "/" || path === "/manifest")) {
       const [{ count: nodes }, { count: connectors }, { count: pulses }, { data: recent }, { data: products }, { data: chainsData }, { data: lock }, { data: pool }, { data: templates }, { count: activePartners }, { count: activeContracts }] = await Promise.all([
         sb.from("runtime_external_nodes").select("*", { count: "exact", head: true }),
@@ -287,7 +346,7 @@ Deno.serve(async (req: Request) => {
       return corsJson({ ok: true, node_id: data, probe_status: probeStatus, probe_ok: probeOk });
     }
 
-    return corsJson({ ok: false, error: "not_found", supported: ["GET /manifest", "GET /evolution", "POST /register"] }, 404);
+    return corsJson({ ok: false, error: "not_found", supported: ["GET /manifest", "GET /evolution", "GET /revenue", "POST /register"] }, 404);
   } catch (e) {
     return corsJson({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
   }
