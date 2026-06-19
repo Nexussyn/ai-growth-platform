@@ -4,28 +4,37 @@ Here's a TypeScript async function that attempts to get a response from free LLM
 
 ```typescript
 /**
- * Tries free LLM APIs in sequence with timeout handling.
- * Attempts Gemini 1.5 Flash first, then falls back to HuggingFace Mistral-7B-Instruct.
- * @param prompt - The text prompt to send to the LLMs
- * @returns Promise<string> - First successful response or empty string
+ * Tries free LLM APIs in sequence and returns the first successful response.
+ * Attempts Gemini 1.5 Flash first, then HuggingFace Mistral-7B-Instruct.
+ * Each request has a 20-second timeout using AbortSignal.
+ * 
+ * @param prompt - The input prompt to send to the LLM
+ * @returns Promise<string> - The generated text or empty string if all fail
  */
 async function tryFreeLLMs(prompt: string): Promise<string> {
-  const TIMEOUT_MS = 20_000; // 20 seconds
+  const TIMEOUT_MS = 20000; // 20 seconds
 
-  // Helper to create AbortSignal with timeout
-  const createTimeoutSignal = (): AbortSignal => {
-    return AbortSignal.timeout(TIMEOUT_MS);
+  // Environment variables for API keys
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const HF_API_KEY = process.env.HF_API_KEY;
+
+  /**
+   * Creates an AbortSignal that times out after specified milliseconds
+   */
+  const createTimeoutSignal = (ms: number): AbortSignal => {
+    return AbortSignal.timeout(ms);
   };
 
-  // --- Attempt 1: Google Gemini 1.5 Flash ---
+  /**
+   * Try Gemini 1.5 Flash API
+   */
   const tryGemini = async (): Promise<string | null> => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    if (!GEMINI_API_KEY) {
       console.warn("GEMINI_API_KEY not set, skipping Gemini");
       return null;
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
     try {
       const response = await fetch(url, {
@@ -36,7 +45,11 @@ async function tryFreeLLMs(prompt: string): Promise<string> {
         body: JSON.stringify({
           contents: [
             {
-              parts: [{ text: prompt }],
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
             },
           ],
           generationConfig: {
@@ -44,11 +57,11 @@ async function tryFreeLLMs(prompt: string): Promise<string> {
             maxOutputTokens: 1024,
           },
         }),
-        signal: createTimeoutSignal(),
+        signal: createTimeoutSignal(TIMEOUT_MS),
       });
 
       if (!response.ok) {
-        console.warn(`Gemini API error: ${response.status} ${response.statusText}`);
+        console.error(`Gemini API error: ${response.status} ${response.statusText}`);
         return null;
       }
 
@@ -57,8 +70,7 @@ async function tryFreeLLMs(prompt: string): Promise<string> {
       // Extract text from Gemini response structure
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       
-      if (typeof text === "string" && text.trim()) {
-        console.log("✓ Gemini 1.5 Flash responded successfully");
+      if (typeof text === "string" && text.trim().length > 0) {
         return text.trim();
       }
       
@@ -66,20 +78,21 @@ async function tryFreeLLMs(prompt: string): Promise<string> {
     } catch (error) {
       if (error instanceof Error) {
         if (error.name === "TimeoutError" || error.name === "AbortError") {
-          console.warn("Gemini request timed out after 20s");
+          console.error("Gemini request timed out");
         } else {
-          console.warn(`Gemini error: ${error.message}`);
+          console.error(`Gemini error: ${error.message}`);
         }
       }
       return null;
     }
   };
 
-  // --- Attempt 2: HuggingFace Mistral-7B-Instruct ---
+  /**
+   * Try HuggingFace Mistral-7B-Instruct API
+   */
   const tryHuggingFaceMistral = async (): Promise<string | null> => {
-    const apiKey = process.env.HUGGINGFACE_API_KEY;
-    if (!apiKey) {
-      console.warn("HUGGINGFACE_API_KEY not set, skipping HuggingFace");
+    if (!HF_API_KEY) {
+      console.warn("HF_API_KEY not set, skipping HuggingFace");
       return null;
     }
 
@@ -92,7 +105,7 @@ async function tryFreeLLMs(prompt: string): Promise<string> {
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${apiKey}`,
+          "Authorization": `Bearer ${HF_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -104,146 +117,143 @@ async function tryFreeLLMs(prompt: string): Promise<string> {
             return_full_text: false,
           },
         }),
-        signal: createTimeoutSignal(),
+        signal: createTimeoutSignal(TIMEOUT_MS),
       });
 
       if (!response.ok) {
-        const errorBody = await response.text().catch(() => "");
-        console.warn(`HuggingFace API error: ${response.status} ${response.statusText} - ${errorBody}`);
+        const errorText = await response.text().catch(() => "");
+        console.error(`HuggingFace API error: ${response.status} ${response.statusText} - ${errorText}`);
         return null;
       }
 
       const data = await response.json();
-
-      // HuggingFace returns array of generated texts
+      
+      // HuggingFace returns an array of generated texts
       let text: string | undefined;
       
-      if (Array.isArray(data) && data[0]?.generated_text) {
-        text = data[0].generated_text;
+      if (Array.isArray(data) && data.length > 0) {
+        text = data[0]?.generated_text;
       } else if (typeof data?.generated_text === "string") {
         text = data.generated_text;
       }
-
-      if (typeof text === "string" && text.trim()) {
-        console.log("✓ HuggingFace Mistral-7B-Instruct responded successfully");
+      
+      if (typeof text === "string" && text.trim().length > 0) {
         return text.trim();
       }
-
+      
       return null;
     } catch (error) {
       if (error instanceof Error) {
         if (error.name === "TimeoutError" || error.name === "AbortError") {
-          console.warn("HuggingFace request timed out after 20s");
+          console.error("HuggingFace request timed out");
         } else {
-          console.warn(`HuggingFace error: ${error.message}`);
+          console.error(`HuggingFace error: ${error.message}`);
         }
       }
       return null;
     }
   };
 
-  // --- Execute in sequence ---
-  console.log(`Attempting free LLMs with prompt: "${prompt.slice(0, 50)}${prompt.length > 50 ? "..." : ""}"`);
-
   // Try Gemini first
+  console.log("Trying Gemini 1.5 Flash...");
   const geminiResult = await tryGemini();
   if (geminiResult) {
+    console.log("Successfully got response from Gemini");
     return geminiResult;
   }
 
-  // Fall back to HuggingFace Mistral
+  // Try HuggingFace Mistral as fallback
+  console.log("Trying HuggingFace Mistral-7B-Instruct...");
   const mistralResult = await tryHuggingFaceMistral();
   if (mistralResult) {
+    console.log("Successfully got response from HuggingFace Mistral");
     return mistralResult;
   }
 
-  // Both failed
-  console.warn("All LLM attempts failed, returning empty string");
+  // All attempts failed
+  console.error("All LLM attempts failed");
   return "";
 }
 
+// Export the function
 export { tryFreeLLMs };
 
-// --- Type definitions for API responses ---
-interface GeminiResponse {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string;
-      }>;
-    };
-  }>;
-}
+// ============================================================
+// Usage Example and Tests
+// ============================================================
 
-interface HuggingFaceResponse {
-  generated_text?: string;
-}
-
-// --- Example usage ---
 async function main() {
-  // Ensure you have these environment variables set:
-  // - GEMINI_API_KEY (get from https://makersuite.google.com/app/apikey)
-  // - HUGGINGFACE_API_KEY (get from https://huggingface.co/settings/tokens)
-
-  const result = await tryFreeLLMs("Explain quantum computing in one paragraph.");
+  // Example usage
+  const prompt = "Explain quantum computing in one sentence.";
+  
+  console.log("=".repeat(50));
+  console.log(`Prompt: "${prompt}"`);
+  console.log("=".repeat(50));
+  
+  const result = await tryFreeLLMs(prompt);
   
   if (result) {
-    console.log("\n--- LLM Response ---");
+    console.log("\n✅ Response received:");
     console.log(result);
   } else {
-    console.log("No response received from any LLM");
+    console.log("\n❌ No response received from any LLM");
   }
 }
 
-// Uncomment to run:
-// main().catch(console.error);
+// Run if executed directly
+main().catch(console.error);
+```
+
+## Environment Setup
+
+Create a `.env` file or set environment variables:
+
+```bash
+# .env
+GEMINI_API_KEY=your_gemini_api_key_here
+HF_API_KEY=your_huggingface_api_key_here
+```
+
+## Alternative Version with Custom Timeout Polyfill
+
+If you're using an older Node.js version that doesn't support `AbortSignal.timeout()`:
+
+```typescript
+/**
+ * Polyfill for AbortSignal.timeout for older environments
+ */
+function createTimeoutSignal(ms: number): AbortSignal {
+  // Use native if available (Node 18+)
+  if (typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(ms);
+  }
+  
+  // Polyfill for older environments
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort(new DOMException("Signal timed out", "TimeoutError"));
+  }, ms);
+  
+  // Clean up timeout if signal is aborted externally
+  controller.signal.addEventListener("abort", () => {
+    clearTimeout(timeoutId);
+  }, { once: true });
+  
+  return controller.signal;
+}
 ```
 
 ## Key Features
 
-| Feature | Implementation |
-|---------|----------------|
-| **Timeout Handling** | Uses `AbortSignal.timeout(20000)` for 20-second timeout per request |
+| Feature | Description |
+|---------|-------------|
 | **Sequential Fallback** | Tries Gemini first, then HuggingFace if Gemini fails |
-| **Error Handling** | Catches network errors, timeouts, and API errors gracefully |
-| **Type Safety** | Full TypeScript types for API responses |
-| **Prompt Formatting** | Formats prompt correctly for Mistral instruction format |
+| **20s Timeout** | Uses `AbortSignal.timeout()` for clean timeout handling |
+| **Error Handling** | Gracefully handles network errors, timeouts, and API errors |
+| **Type Safety** | Full TypeScript types with proper null checking |
+| **Empty String Fallback** | Returns `""` if all attempts fail (as specified) |
 
-## Environment Variables Required
+## Getting Free API Keys
 
-```bash
-# .env file
-GEMINI_API_KEY=your_gemini_api_key_here
-HUGGINGFACE_API_KEY=your_huggingface_token_here
-```
-
-## API Free Tier Limits
-
-| Provider | Model | Free Tier |
-|----------|-------|-----------|
-| Google Gemini | gemini-1.5-flash | 15 RPM, 1M tokens/day |
-| HuggingFace | Mistral-7B-Instruct | Rate limited, free inference API |
-
-## Alternative with Parallel Racing (Bonus)
-
-If you want to try both simultaneously and return the first success:
-
-```typescript
-async function tryFreeLLMsParallel(prompt: string): Promise<string> {
-  const TIMEOUT_MS = 20_000;
-
-  const geminiPromise = tryGeminiInternal(prompt, TIMEOUT_MS);
-  const mistralPromise = tryMistralInternal(prompt, TIMEOUT_MS);
-
-  // Race for first successful result
-  const results = await Promise.allSettled([geminiPromise, mistralPromise]);
-
-  for (const result of results) {
-    if (result.status === "fulfilled" && result.value) {
-      return result.value;
-    }
-  }
-
-  return "";
-}
-```
+1. **Gemini API Key**: [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. **HuggingFace API Key**: [HuggingFace Settings](https://huggingface.co/settings/tokens)
