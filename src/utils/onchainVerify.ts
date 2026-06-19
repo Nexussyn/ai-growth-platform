@@ -1,38 +1,45 @@
 # USDC Transfer Verification Function
 
-Here's a comprehensive TypeScript async function that verifies USDC transfers on Base and Polygon networks by querying public EVM RPCs:
+Here's a comprehensive TypeScript async function that verifies USDC transfers on Base and Polygon networks by querying public EVM RPCs.
 
 ```typescript
 /**
  * USDC Transfer Verification Module
- * Verifies USDC ERC-20 transfer events on Base (8453) and Polygon (137)
+ * Verifies USDC transfers on Base (8453) and Polygon (137) networks
  */
 
-// USDC Contract addresses per chain
-const USDC_ADDRESSES: Record<number, string> = {
-  8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base USDC
-  137: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",  // Polygon USDC (native)
-};
+// Chain configuration type
+interface ChainConfig {
+  name: string;
+  rpcUrl: string;
+  usdcAddress: string;
+  decimals: number;
+}
 
-// Public RPC endpoints per chain
-const RPC_ENDPOINTS: Record<number, string[]> = {
-  8453: [
-    "https://mainnet.base.org",
-    "https://base.publicnode.com",
-    "https://base.drpc.org",
-  ],
-  137: [
-    "https://polygon-rpc.com",
-    "https://polygon.publicnode.com",
-    "https://polygon.drpc.org",
-  ],
-};
+// Transfer event log structure
+interface TransactionLog {
+  address: string;
+  topics: string[];
+  data: string;
+  transactionHash: string;
+  logIndex: string;
+  blockNumber: string;
+  removed: boolean;
+}
 
-// ERC-20 Transfer event signature: Transfer(address indexed from, address indexed to, uint256 value)
-const TRANSFER_EVENT_SIGNATURE =
-  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+// Transaction receipt structure from RPC
+interface TransactionReceipt {
+  transactionHash: string;
+  status: string; // '0x1' for success, '0x0' for failure
+  from: string;
+  to: string;
+  logs: TransactionLog[];
+  blockNumber: string;
+  gasUsed: string;
+  effectiveGasPrice: string;
+}
 
-// Interfaces for RPC responses
+// JSON-RPC response structure
 interface JsonRpcResponse<T> {
   jsonrpc: string;
   id: number;
@@ -43,32 +50,26 @@ interface JsonRpcResponse<T> {
   };
 }
 
-interface TransactionReceipt {
-  transactionHash: string;
-  blockNumber: string;
-  status: string;
-  logs: TransactionLog[];
-  to: string | null;
-  from: string;
-  contractAddress: string | null;
-}
+// ERC20 Transfer event signature: Transfer(address indexed from, address indexed to, uint256 value)
+const TRANSFER_EVENT_SIGNATURE = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
-interface TransactionLog {
-  address: string;
-  topics: string[];
-  data: string;
-  blockNumber: string;
-  transactionHash: string;
-  logIndex: string;
-  removed: boolean;
-}
-
-interface ParsedTransferEvent {
-  from: string;
-  to: string;
-  amount: bigint;
-  contractAddress: string;
-}
+// Supported chain configurations with public RPC endpoints
+const CHAIN_CONFIGS: Record<number, ChainConfig> = {
+  // Base Mainnet
+  8453: {
+    name: 'Base',
+    rpcUrl: 'https://mainnet.base.org',
+    usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // Native USDC on Base
+    decimals: 6,
+  },
+  // Polygon Mainnet
+  137: {
+    name: 'Polygon',
+    rpcUrl: 'https://polygon-rpc.com',
+    usdcAddress: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', // Native USDC on Polygon (USDC.e is 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174)
+    decimals: 6,
+  },
+};
 
 /**
  * Custom error class for verification failures
@@ -80,7 +81,7 @@ class VerificationError extends Error {
     public readonly details?: Record<string, unknown>
   ) {
     super(message);
-    this.name = "VerificationError";
+    this.name = 'VerificationError';
   }
 }
 
@@ -88,22 +89,21 @@ class VerificationError extends Error {
  * Makes a JSON-RPC call to the specified endpoint
  */
 async function rpcCall<T>(
-  endpoint: string,
+  rpcUrl: string,
   method: string,
-  params: unknown[],
-  timeoutMs: number = 10000
+  params: unknown[]
 ): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        jsonrpc: "2.0",
+        jsonrpc: '2.0',
         id: Date.now(),
         method,
         params,
@@ -112,17 +112,28 @@ async function rpcCall<T>(
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
+      throw new VerificationError(
+        `RPC request failed with status ${response.status}`,
+        'RPC_HTTP_ERROR',
+        { status: response.status, statusText: response.statusText }
+      );
     }
 
     const data: JsonRpcResponse<T> = await response.json();
 
     if (data.error) {
-      throw new Error(`RPC error: ${data.error.code} - ${data.error.message}`);
+      throw new VerificationError(
+        `RPC error: ${data.error.message}`,
+        'RPC_ERROR',
+        { code: data.error.code, message: data.error.message }
+      );
     }
 
     if (data.result === undefined) {
-      throw new Error("RPC response missing result");
+      throw new VerificationError(
+        'RPC returned undefined result',
+        'RPC_EMPTY_RESULT'
+      );
     }
 
     return data.result;
@@ -132,42 +143,41 @@ async function rpcCall<T>(
 }
 
 /**
- * Attempts RPC call with fallback endpoints
- */
-async function rpcCallWithFallback<T>(
-  endpoints: string[],
-  method: string,
-  params: unknown[]
-): Promise<T> {
-  let lastError: Error | null = null;
-
-  for (const endpoint of endpoints) {
-    try {
-      return await rpcCall<T>(endpoint, method, params);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      console.warn(`RPC call failed for ${endpoint}: ${lastError.message}`);
-      continue;
-    }
-  }
-
-  throw new VerificationError(
-    `All RPC endpoints failed: ${lastError?.message}`,
-    "RPC_FAILURE"
-  );
-}
-
-/**
  * Normalizes an Ethereum address to lowercase with checksum validation
  */
 function normalizeAddress(address: string): string {
   if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
     throw new VerificationError(
-      `Invalid Ethereum address: ${address}`,
-      "INVALID_ADDRESS"
+      `Invalid Ethereum address format: ${address}`,
+      'INVALID_ADDRESS'
     );
   }
   return address.toLowerCase();
+}
+
+/**
+ * Extracts address from a 32-byte padded topic
+ */
+function extractAddressFromTopic(topic: string): string {
+  if (!topic || topic.length !== 66) {
+    throw new VerificationError(
+      `Invalid topic format: ${topic}`,
+      'INVALID_TOPIC'
+    );
+  }
+  // Remove '0x' prefix, take last 40 characters (20 bytes = address)
+  return normalizeAddress('0x' + topic.slice(26));
+}
+
+/**
+ * Decodes uint256 value from hex data
+ */
+function decodeUint256(hexData: string): bigint {
+  if (!hexData || hexData === '0x') {
+    return BigInt(0);
+  }
+  // Remove '0x' prefix and parse as hex
+  return BigInt(hexData);
 }
 
 /**
@@ -177,40 +187,20 @@ function validateTxHash(txHash: string): void {
   if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
     throw new VerificationError(
       `Invalid transaction hash format: ${txHash}`,
-      "INVALID_TX_HASH"
+      'INVALID_TX_HASH'
     );
   }
 }
 
 /**
- * Parses a uint256 value from hex string (handles both data field and padded topics)
+ * Finds USDC transfer events in transaction logs
  */
-function parseUint256(hexValue: string): bigint {
-  // Remove 0x prefix and parse
-  const cleanHex = hexValue.startsWith("0x") ? hexValue.slice(2) : hexValue;
-  if (cleanHex.length === 0) {
-    return 0n;
-  }
-  return BigInt("0x" + cleanHex);
-}
-
-/**
- * Extracts address from a 32-byte padded topic
- */
-function extractAddressFromTopic(topic: string): string {
-  // Topics are 32 bytes (64 hex chars + 0x), address is last 20 bytes (40 hex chars)
-  return "0x" + topic.slice(-40).toLowerCase();
-}
-
-/**
- * Parses Transfer events from transaction logs
- */
-function parseTransferEvents(
+function findUSDCTransfers(
   logs: TransactionLog[],
   usdcAddress: string
-): ParsedTransferEvent[] {
+): Array<{ from: string; to: string; amount: bigint }> {
   const normalizedUsdcAddress = normalizeAddress(usdcAddress);
-  const transfers: ParsedTransferEvent[] = [];
+  const transfers: Array<{ from: string; to: string; amount: bigint }> = [];
 
   for (const log of logs) {
     // Check if this log is from the USDC contract
@@ -218,52 +208,49 @@ function parseTransferEvents(
       continue;
     }
 
-    // Check if this is a Transfer event (first topic matches signature)
-    if (
-      log.topics.length < 3 ||
-      log.topics[0].toLowerCase() !== TRANSFER_EVENT_SIGNATURE.toLowerCase()
-    ) {
+    // Check if this is a Transfer event (first topic is the event signature)
+    if (log.topics.length < 3 || log.topics[0] !== TRANSFER_EVENT_SIGNATURE) {
       continue;
     }
 
-    // Parse the Transfer event
-    // topics[0] = event signature
-    // topics[1] = from address (indexed, 32-byte padded)
-    // topics[2] = to address (indexed, 32-byte padded)
-    // data = amount (uint256)
+    // Skip if log was removed (reorg)
+    if (log.removed) {
+      continue;
+    }
+
+    // Extract transfer details
+    // topics[1] = from address (indexed)
+    // topics[2] = to address (indexed)
+    // data = amount (non-indexed)
     const from = extractAddressFromTopic(log.topics[1]);
     const to = extractAddressFromTopic(log.topics[2]);
-    const amount = parseUint256(log.data);
+    const amount = decodeUint256(log.data);
 
-    transfers.push({
-      from,
-      to,
-      amount,
-      contractAddress: normalizeAddress(log.address),
-    });
+    transfers.push({ from, to, amount });
   }
 
   return transfers;
 }
 
 /**
- * Verifies a USDC transfer on Base (8453) or Polygon (137)
+ * Verifies a USDC transfer on Base or Polygon networks
  *
- * @param txHash - The transaction hash to verify
+ * @param txHash - The transaction hash to verify (0x-prefixed, 64 hex chars)
  * @param chainId - The chain ID (8453 for Base, 137 for Polygon)
- * @param expectedAmount - The expected transfer amount in USDC base units (6 decimals)
- * @param expectedTo - The expected recipient address
- * @returns Promise<boolean> - True if the transfer is verified, false otherwise
- * @throws VerificationError for invalid inputs or RPC failures
+ * @param expectedAmount - The expected USDC amount in smallest units (6 decimals)
+ * @param expectedTo - The expected recipient address (0x-prefixed, 40 hex chars)
+ * @returns Promise<boolean> - True if a matching transfer is found, false otherwise
+ *
+ * @throws {VerificationError} If chain is unsupported, inputs are invalid, or RPC fails
  *
  * @example
  * ```typescript
  * // Verify a 100 USDC transfer on Base
  * const isValid = await verifyUSDCTransfer(
- *   "0x1234...abcd",
- *   8453,
- *   100_000_000n, // 100 USDC (6 decimals)
- *   "0xRecipient..."
+ *   '0x1234...', // transaction hash
+ *   8453,        // Base chain ID
+ *   100000000n,  // 100 USDC (6 decimals)
+ *   '0xRecipient...'
  * );
  * ```
  */
@@ -274,11 +261,12 @@ export async function verifyUSDCTransfer(
   expectedTo: string
 ): Promise<boolean> {
   // Validate chain ID
-  if (chainId !== 8453 && chainId !== 137) {
+  const chainConfig = CHAIN_CONFIGS[chainId];
+  if (!chainConfig) {
     throw new VerificationError(
       `Unsupported chain ID: ${chainId}. Supported chains: Base (8453), Polygon (137)`,
-      "UNSUPPORTED_CHAIN",
-      { chainId, supportedChains: [8453, 137] }
+      'UNSUPPORTED_CHAIN',
+      { chainId, supportedChains: Object.keys(CHAIN_CONFIGS).map(Number) }
     );
   }
 
@@ -286,168 +274,162 @@ export async function verifyUSDCTransfer(
   validateTxHash(txHash);
   const normalizedExpectedTo = normalizeAddress(expectedTo);
 
-  if (expectedAmount < 0n) {
+  if (expectedAmount < BigInt(0)) {
     throw new VerificationError(
-      "Expected amount cannot be negative",
-      "INVALID_AMOUNT"
+      'Expected amount cannot be negative',
+      'INVALID_AMOUNT',
+      { expectedAmount: expectedAmount.toString() }
     );
   }
 
-  // Get chain-specific configuration
-  const usdcAddress = USDC_ADDRESSES[chainId];
-  const rpcEndpoints = RPC_ENDPOINTS[chainId];
-
   // Fetch transaction receipt
-  const receipt = await rpcCallWithFallback<TransactionReceipt | null>(
-    rpcEndpoints,
-    "eth_getTransactionReceipt",
+  const receipt = await rpcCall<TransactionReceipt | null>(
+    chainConfig.rpcUrl,
+    'eth_getTransactionReceipt',
     [txHash]
   );
 
   // Check if transaction exists
   if (!receipt) {
-    console.log(`Transaction not found or not yet mined: ${txHash}`);
+    // Transaction not found - could be pending or invalid
     return false;
   }
 
-  // Check transaction status (0x1 = success, 0x0 = failure)
-  if (receipt.status !== "0x1") {
-    console.log(`Transaction failed (reverted): ${txHash}`);
+  // Check if transaction was successful
+  // status: '0x1' = success, '0x0' = failure
+  if (receipt.status !== '0x1') {
     return false;
   }
 
-  // Parse Transfer events from logs
-  const transfers = parseTransferEvents(receipt.logs, usdcAddress);
+  // Find USDC transfer events in the logs
+  const transfers = findUSDCTransfers(receipt.logs, chainConfig.usdcAddress);
 
-  if (transfers.length === 0) {
-    console.log(`No USDC Transfer events found in transaction: ${txHash}`);
-    return false;
-  }
-
-  // Check if any transfer matches expected criteria
+  // Check if any transfer matches our expected parameters
   for (const transfer of transfers) {
-    const toMatches = transfer.to === normalizedExpectedTo;
-    const amountMatches = transfer.amount === expectedAmount;
-
-    if (toMatches && amountMatches) {
-      console.log(`USDC transfer verified successfully:`, {
-        txHash,
-        chainId,
-        from: transfer.from,
-        to: transfer.to,
-        amount: transfer.amount.toString(),
-      });
+    if (
+      transfer.to === normalizedExpectedTo &&
+      transfer.amount === expectedAmount
+    ) {
       return true;
     }
   }
 
-  // Log detailed mismatch information for debugging
-  console.log(`USDC transfer verification failed. Found transfers:`, {
-    txHash,
-    chainId,
-    expected: {
-      to: normalizedExpectedTo,
-      amount: expectedAmount.toString(),
-    },
-    found: transfers.map((t) => ({
-      to: t.to,
-      amount: t.amount.toString(),
-      toMatches: t.to === normalizedExpectedTo,
-      amountMatches: t.amount === expectedAmount,
-    })),
-  });
-
+  // No matching transfer found
   return false;
 }
 
 /**
- * Extended verification with additional details
+ * Extended verification result with detailed information
  */
-export interface VerificationResult {
+export interface DetailedVerificationResult {
   verified: boolean;
-  txHash: string;
-  chainId: number;
-  blockNumber?: bigint;
-  transfers: ParsedTransferEvent[];
-  matchedTransfer?: ParsedTransferEvent;
+  transactionFound: boolean;
+  transactionSuccessful: boolean;
+  chainName: string;
+  blockNumber: bigint | null;
+  transfers: Array<{
+    from: string;
+    to: string;
+    amount: bigint;
+    amountFormatted: string;
+  }>;
+  matchingTransfer: {
+    from: string;
+    to: string;
+    amount: bigint;
+    amountFormatted: string;
+  } | null;
   error?: string;
 }
 
 /**
- * Extended verification function that returns detailed results
+ * Extended version that returns detailed verification information
  */
 export async function verifyUSDCTransferDetailed(
   txHash: string,
   chainId: number,
   expectedAmount: bigint,
   expectedTo: string
-): Promise<VerificationResult> {
-  const result: VerificationResult = {
-    verified: false,
-    txHash,
-    chainId,
-    transfers: [],
+): Promise<DetailedVerificationResult> {
+  const chainConfig = CHAIN_CONFIGS[chainId];
+  
+  if (!chainConfig) {
+    return {
+      verified: false,
+      transactionFound: false,
+      transactionSuccessful: false,
+      chainName: 'Unknown',
+      blockNumber: null,
+      transfers: [],
+      matchingTransfer: null,
+      error: `Unsupported chain ID: ${chainId}`,
+    };
+  }
+
+  const formatAmount = (amount: bigint): string => {
+    const divisor = BigInt(10 ** chainConfig.decimals);
+    const whole = amount / divisor;
+    const fraction = amount % divisor;
+    return `${whole}.${fraction.toString().padStart(chainConfig.decimals, '0')} USDC`;
   };
 
   try {
-    // Validate chain ID
-    if (chainId !== 8453 && chainId !== 137) {
-      result.error = `Unsupported chain ID: ${chainId}`;
-      return result;
-    }
-
-    // Validate inputs
     validateTxHash(txHash);
     const normalizedExpectedTo = normalizeAddress(expectedTo);
 
-    // Get chain-specific configuration
-    const usdcAddress = USDC_ADDRESSES[chainId];
-    const rpcEndpoints = RPC_ENDPOINTS[chainId];
-
-    // Fetch transaction receipt
-    const receipt = await rpcCallWithFallback<TransactionReceipt | null>(
-      rpcEndpoints,
-      "eth_getTransactionReceipt",
+    const receipt = await rpcCall<TransactionReceipt | null>(
+      chainConfig.rpcUrl,
+      'eth_getTransactionReceipt',
       [txHash]
     );
 
     if (!receipt) {
-      result.error = "Transaction not found or not yet mined";
-      return result;
+      return {
+        verified: false,
+        transactionFound: false,
+        transactionSuccessful: false,
+        chainName: chainConfig.name,
+        blockNumber: null,
+        transfers: [],
+        matchingTransfer: null,
+      };
     }
 
-    result.blockNumber = BigInt(receipt.blockNumber);
+    const transactionSuccessful = receipt.status === '0x1';
+    const blockNumber = BigInt(receipt.blockNumber);
+    const transfers = findUSDCTransfers(receipt.logs, chainConfig.usdcAddress);
 
-    if (receipt.status !== "0x1") {
-      result.error = "Transaction failed (reverted)";
-      return result;
-    }
+    const formattedTransfers = transfers.map((t) => ({
+      ...t,
+      amountFormatted: formatAmount(t.amount),
+    }));
 
-    // Parse Transfer events
-    result.transfers = parseTransferEvents(receipt.logs, usdcAddress);
+    const matchingTransfer = transfers.find(
+      (t) => t.to === normalizedExpectedTo && t.amount === expectedAmount
+    );
 
-    // Find matching transfer
-    for (const transfer of result.transfers) {
-      if (
-        transfer.to === normalizedExpectedTo &&
-        transfer.amount === expectedAmount
-      ) {
-        result.verified = true;
-        result.matchedTransfer = transfer;
-        break;
-      }
-    }
-
-    if (!result.verified && result.transfers.length > 0) {
-      result.error = "No matching transfer found with expected amount and recipient";
-    } else if (result.transfers.length === 0) {
-      result.error = "No USDC Transfer events found in transaction";
-    }
-
-    return result;
+    return {
+      verified: transactionSuccessful && matchingTransfer !== undefined,
+      transactionFound: true,
+      transactionSuccessful,
+      chainName: chainConfig.name,
+      blockNumber,
+      transfers: formattedTransfers,
+      matchingTransfer: matchingTransfer
+        ? { ...matchingTransfer, amountFormatted: formatAmount(matchingTransfer.amount) }
+        : null,
+    };
   } catch (error) {
-    result.error = error instanceof Error ? error.message : String(error);
-    return result;
+    return {
+      verified: false,
+      transactionFound: false,
+      transactionSuccessful: false,
+      chainName: chainConfig.name,
+      blockNumber: null,
+      transfers: [],
+      matchingTransfer: null,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
 }
 
@@ -455,45 +437,42 @@ export async function verifyUSDCTransferDetailed(
 // Example Usage and Tests
 // ============================================================================
 
-/**
- * Example usage demonstrating the verification function
- */
-async function exampleUsage(): Promise<void> {
-  console.log("=== USDC Transfer Verification Examples ===\n");
+async function main() {
+  console.log('USDC Transfer Verification Examples\n');
+  console.log('='.repeat(50));
 
-  // Example 1: Basic verification (you would use a real txHash)
-  const exampleTxHash =
-    "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
-  const recipientAddress = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb2";
-  const amount = 100_000_000n; // 100 USDC (6 decimals)
+  // Example 1: Verify a transfer on Base
+  console.log('\n📍 Example 1: Verifying transfer on Base');
+  
+  const baseTxHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+  const baseChainId = 8453;
+  const amount = BigInt(100_000_000); // 100 USDC (6 decimals)
+  const recipient = '0x742d35Cc6634C0532925a3b844Bc9e7595f5bB0B';
 
   try {
-    // Verify on Base
-    console.log("Verifying USDC transfer on Base...");
-    const isValidBase = await verifyUSDCTransfer(
-      exampleTxHash,
-      8453, // Base chain ID
+    const isValid = await verifyUSDCTransfer(
+      baseTxHash,
+      baseChainId,
       amount,
-      recipientAddress
+      recipient
     );
-    console.log(`Base verification result: ${isValidBase}\n`);
+    console.log(`✅ Transfer verified: ${isValid}`);
+  } catch (error) {
+    if (error instanceof VerificationError) {
+      console.log(`❌ Verification failed: ${error.message} (${error.code})`);
+    } else {
+      console.log(`❌ Error: ${error}`);
+    }
+  }
 
-    // Verify on Polygon
-    console.log("Verifying USDC transfer on Polygon...");
-    const isValidPolygon = await verifyUSDCTransfer(
-      exampleTxHash,
-      137, // Polygon chain ID
-      amount,
-      recipientAddress
-    );
-    console.log(`Polygon verification result: ${isValidPolygon}\n`);
+  // Example 2: Get detailed verification on Polygon
+  console.log('\n📍 Example 2: Detailed verification on Polygon');
+  
+  const polygonTxHash = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+  const polygonChainId = 137;
 
-    // Detailed verification
-    console.log("Running detailed verification...");
-    const detailedResult = await verifyUSDCTransferDetailed(
-      exampleTxHash,
-      8453,
-      amount,
-      recipientAddress
-    );
-    console.log("
+  const detailedResult = await verifyUSDCTransferDetailed(
+    polygonTxHash,
+    polygonChainId,
+    BigInt(50_000_000), // 50 USDC
+    '0x742d35
