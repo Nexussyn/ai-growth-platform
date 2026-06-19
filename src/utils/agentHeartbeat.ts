@@ -1,16 +1,16 @@
 # TypeScript Heartbeat Utility Function
 
-Here's a comprehensive TypeScript utility function that upserts to an `agent_status` table using the Supabase client:
+Here's a comprehensive TypeScript utility function that upserts agent status to a Supabase `agent_status` table:
 
 ```typescript
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-
 /**
- * Agent status record structure in the database
+ * Agent Heartbeat Utility
+ * Upserts agent status to track active agents and their request counts
  */
+
 interface AgentStatus {
   agent_id: string;
-  status: 'active' | 'inactive' | 'error' | 'starting';
+  status: 'active' | 'inactive' | 'error';
   last_request_at: string;
   requests_processed: number;
   metadata?: Record<string, unknown>;
@@ -18,14 +18,20 @@ interface AgentStatus {
   updated_at?: string;
 }
 
-/**
- * Error class for heartbeat-specific errors
- */
+interface HeartbeatOptions {
+  /** Request timeout in milliseconds */
+  timeout?: number;
+  /** Number of retry attempts */
+  retries?: number;
+  /** Initial retry delay in milliseconds */
+  retryDelay?: number;
+}
+
 class HeartbeatError extends Error {
   constructor(
     message: string,
-    public readonly agentId: string,
-    public readonly cause?: unknown
+    public readonly statusCode?: number,
+    public readonly details?: unknown
   ) {
     super(message);
     this.name = 'HeartbeatError';
@@ -33,27 +39,23 @@ class HeartbeatError extends Error {
 }
 
 /**
- * Sends a heartbeat to update agent status in Supabase.
- * 
- * This function performs an upsert operation on the `agent_status` table:
- * - Sets status to 'active'
- * - Updates last_request_at to current timestamp
- * - Increments requests_processed counter
- * - Optionally updates metadata
+ * Sends a heartbeat to update agent status in Supabase
  * 
  * @param agentId - Unique identifier for the agent
- * @param supabaseUrl - Supabase project URL
- * @param serviceKey - Supabase service role key (for server-side operations)
- * @param metadata - Optional additional metadata to store with the agent status
- * @throws {HeartbeatError} If the upsert operation fails
+ * @param supabaseUrl - Supabase project URL (e.g., https://xxx.supabase.co)
+ * @param serviceKey - Supabase service role key for authenticated access
+ * @param metadata - Optional metadata to store with the agent status
+ * @param options - Optional configuration for timeout and retries
+ * 
+ * @throws {HeartbeatError} When the upsert operation fails
  * 
  * @example
  * ```typescript
  * await sendHeartbeat(
- *   'agent-001',
- *   'https://your-project.supabase.co',
- *   'your-service-key',
- *   { version: '1.0.0', region: 'us-west-2' }
+ *   'agent-123',
+ *   'https://myproject.supabase.co',
+ *   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+ *   { version: '1.0.0', region: 'us-east-1' }
  * );
  * ```
  */
@@ -61,208 +63,298 @@ export async function sendHeartbeat(
   agentId: string,
   supabaseUrl: string,
   serviceKey: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  options: HeartbeatOptions = {}
 ): Promise<void> {
   // Validate inputs
-  if (!agentId?.trim()) {
-    throw new HeartbeatError('Agent ID is required', agentId);
+  if (!agentId || typeof agentId !== 'string') {
+    throw new HeartbeatError('agentId is required and must be a non-empty string');
   }
-  if (!supabaseUrl?.trim()) {
-    throw new HeartbeatError('Supabase URL is required', agentId);
+  
+  if (!supabaseUrl || typeof supabaseUrl !== 'string') {
+    throw new HeartbeatError('supabaseUrl is required and must be a non-empty string');
   }
-  if (!serviceKey?.trim()) {
-    throw new HeartbeatError('Service key is required', agentId);
+  
+  if (!serviceKey || typeof serviceKey !== 'string') {
+    throw new HeartbeatError('serviceKey is required and must be a non-empty string');
   }
 
-  // Create Supabase client with service role key
-  const supabase: SupabaseClient = createClient(supabaseUrl, serviceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+  const {
+    timeout = 10000,
+    retries = 3,
+    retryDelay = 1000
+  } = options;
 
-  try {
-    // First, try to get the current requests_processed count
-    const { data: existingRecord, error: fetchError } = await supabase
-      .from('agent_status')
-      .select('requests_processed')
-      .eq('agent_id', agentId)
-      .single();
+  // Normalize Supabase URL
+  const baseUrl = supabaseUrl.replace(/\/$/, '');
+  const endpoint = `${baseUrl}/rest/v1/rpc/upsert_agent_heartbeat`;
 
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      // PGRST116 = no rows found, which is fine for new agents
-      throw new HeartbeatError(
-        `Failed to fetch existing agent status: ${fetchError.message}`,
-        agentId,
-        fetchError
-      );
-    }
+  const payload = {
+    p_agent_id: agentId,
+    p_metadata: metadata ?? null
+  };
 
-    const currentCount = existingRecord?.requests_processed ?? 0;
-    const now = new Date().toISOString();
+  let lastError: Error | null = null;
 
-    // Prepare the upsert payload
-    const upsertPayload: Partial<AgentStatus> = {
-      agent_id: agentId,
-      status: 'active',
-      last_request_at: now,
-      requests_processed: currentCount + 1,
-      updated_at: now,
-    };
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    // Include metadata if provided
-    if (metadata !== undefined) {
-      upsertPayload.metadata = metadata;
-    }
-
-    // If this is a new record, set created_at
-    if (!existingRecord) {
-      upsertPayload.created_at = now;
-    }
-
-    // Perform the upsert
-    const { error: upsertError } = await supabase
-      .from('agent_status')
-      .upsert(upsertPayload, {
-        onConflict: 'agent_id',
-        ignoreDuplicates: false,
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
 
-    if (upsertError) {
-      throw new HeartbeatError(
-        `Failed to upsert agent status: ${upsertError.message}`,
-        agentId,
-        upsertError
-      );
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new HeartbeatError(
+          `Heartbeat failed: ${response.statusText}`,
+          response.status,
+          errorBody
+        );
+      }
+
+      // Success - exit the retry loop
+      return;
+
+    } catch (error) {
+      lastError = error as Error;
+
+      // Don't retry on validation errors or client errors (4xx)
+      if (error instanceof HeartbeatError && 
+          error.statusCode && 
+          error.statusCode >= 400 && 
+          error.statusCode < 500) {
+        throw error;
+      }
+
+      // If we have retries left, wait and try again
+      if (attempt < retries) {
+        const delay = retryDelay * Math.pow(2, attempt); // Exponential backoff
+        await sleep(delay);
+      }
     }
-  } catch (error) {
-    if (error instanceof HeartbeatError) {
-      throw error;
-    }
-    throw new HeartbeatError(
-      `Unexpected error during heartbeat: ${error instanceof Error ? error.message : String(error)}`,
-      agentId,
-      error
-    );
   }
+
+  // All retries exhausted
+  throw new HeartbeatError(
+    `Heartbeat failed after ${retries + 1} attempts: ${lastError?.message}`,
+    undefined,
+    lastError
+  );
 }
 
 /**
- * Alternative version using RPC for atomic increment operation.
- * This is more reliable under high concurrency.
+ * Alternative implementation using direct table upsert (without RPC)
+ * Use this if you prefer not to create a database function
  */
-export async function sendHeartbeatAtomic(
+export async function sendHeartbeatDirect(
   agentId: string,
   supabaseUrl: string,
   serviceKey: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  options: HeartbeatOptions = {}
 ): Promise<void> {
-  if (!agentId?.trim()) {
-    throw new HeartbeatError('Agent ID is required', agentId);
-  }
-  if (!supabaseUrl?.trim()) {
-    throw new HeartbeatError('Supabase URL is required', agentId);
-  }
-  if (!serviceKey?.trim()) {
-    throw new HeartbeatError('Service key is required', agentId);
+  if (!agentId || !supabaseUrl || !serviceKey) {
+    throw new HeartbeatError('agentId, supabaseUrl, and serviceKey are required');
   }
 
-  const supabase: SupabaseClient = createClient(supabaseUrl, serviceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+  const {
+    timeout = 10000,
+    retries = 3,
+    retryDelay = 1000
+  } = options;
 
-  try {
-    const { error } = await supabase.rpc('upsert_agent_heartbeat', {
-      p_agent_id: agentId,
-      p_metadata: metadata ?? null,
-    });
+  const baseUrl = supabaseUrl.replace(/\/$/, '');
+  
+  let lastError: Error | null = null;
 
-    if (error) {
-      throw new HeartbeatError(
-        `Failed to send heartbeat via RPC: ${error.message}`,
-        agentId,
-        error
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      // First, get current requests_processed count
+      const getResponse = await fetch(
+        `${baseUrl}/rest/v1/agent_status?agent_id=eq.${encodeURIComponent(agentId)}&select=requests_processed`,
+        {
+          method: 'GET',
+          headers: {
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`
+          },
+          signal: controller.signal
+        }
       );
+
+      let currentCount = 0;
+      if (getResponse.ok) {
+        const data = await getResponse.json();
+        if (data.length > 0) {
+          currentCount = data[0].requests_processed ?? 0;
+        }
+      }
+
+      // Upsert the record
+      const upsertPayload: Partial<AgentStatus> = {
+        agent_id: agentId,
+        status: 'active',
+        last_request_at: new Date().toISOString(),
+        requests_processed: currentCount + 1,
+        updated_at: new Date().toISOString()
+      };
+
+      if (metadata !== undefined) {
+        upsertPayload.metadata = metadata;
+      }
+
+      const upsertResponse = await fetch(
+        `${baseUrl}/rest/v1/agent_status`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`,
+            'Prefer': 'resolution=merge-duplicates,return=minimal'
+          },
+          body: JSON.stringify(upsertPayload),
+          signal: controller.signal
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (!upsertResponse.ok) {
+        const errorBody = await upsertResponse.text();
+        throw new HeartbeatError(
+          `Heartbeat upsert failed: ${upsertResponse.statusText}`,
+          upsertResponse.status,
+          errorBody
+        );
+      }
+
+      return;
+
+    } catch (error) {
+      lastError = error as Error;
+
+      if (error instanceof HeartbeatError && 
+          error.statusCode && 
+          error.statusCode >= 400 && 
+          error.statusCode < 500) {
+        throw error;
+      }
+
+      if (attempt < retries) {
+        await sleep(retryDelay * Math.pow(2, attempt));
+      }
     }
-  } catch (error) {
-    if (error instanceof HeartbeatError) {
-      throw error;
-    }
-    throw new HeartbeatError(
-      `Unexpected error during atomic heartbeat: ${error instanceof Error ? error.message : String(error)}`,
-      agentId,
-      error
-    );
   }
+
+  throw new HeartbeatError(
+    `Heartbeat failed after ${retries + 1} attempts: ${lastError?.message}`,
+    undefined,
+    lastError
+  );
 }
 
-// Export the error class for consumers to catch specific errors
-export { HeartbeatError };
-export type { AgentStatus };
+// Helper function
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export { HeartbeatError, HeartbeatOptions, AgentStatus };
 ```
 
-## Database Schema
+## Required Database Setup
 
-Here's the SQL to create the required table and RPC function:
+### SQL Migration for Table and Function
 
 ```sql
 -- Create the agent_status table
 CREATE TABLE IF NOT EXISTS agent_status (
-  agent_id TEXT PRIMARY KEY,
-  status TEXT NOT NULL DEFAULT 'inactive' 
-    CHECK (status IN ('active', 'inactive', 'error', 'starting')),
-  last_request_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  requests_processed BIGINT NOT NULL DEFAULT 0,
-  metadata JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    agent_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'inactive' CHECK (status IN ('active', 'inactive', 'error')),
+    last_request_at TIMESTAMPTZ DEFAULT NOW(),
+    requests_processed INTEGER DEFAULT 0,
+    metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Create index for querying active agents
-CREATE INDEX IF NOT EXISTS idx_agent_status_status 
-  ON agent_status(status);
+CREATE INDEX IF NOT EXISTS idx_agent_status_status ON agent_status(status);
+CREATE INDEX IF NOT EXISTS idx_agent_status_last_request ON agent_status(last_request_at);
 
-CREATE INDEX IF NOT EXISTS idx_agent_status_last_request 
-  ON agent_status(last_request_at);
-
--- RPC function for atomic heartbeat (recommended for high concurrency)
+-- Create the upsert function (atomic increment)
 CREATE OR REPLACE FUNCTION upsert_agent_heartbeat(
-  p_agent_id TEXT,
-  p_metadata JSONB DEFAULT NULL
+    p_agent_id TEXT,
+    p_metadata JSONB DEFAULT NULL
 )
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-  INSERT INTO agent_status (
-    agent_id, 
-    status, 
-    last_request_at, 
-    requests_processed, 
-    metadata,
-    created_at,
-    updated_at
-  )
-  VALUES (
-    p_agent_id,
-    'active',
-    NOW(),
-    1,
-    p_metadata,
-    NOW(),
-    NOW()
-  )
-  ON CONFLICT (agent_id) DO UPDATE SET
-    status = 'active',
-    last_request_at = NOW(),
-    requests_processed = agent_status.requests_processed + 1,
-    metadata = COALESCE(p_metadata, agent_status.metadata),
-    updated_at = NOW();
+    INSERT INTO agent_status (
+        agent_id,
+        status,
+        last_request_at,
+        requests_processed,
+        metadata,
+        created_at,
+        updated_at
+    )
+    VALUES (
+        p_agent_id,
+        'active',
+        NOW(),
+        1,
+        COALESCE(p_metadata, '{}'::JSONB),
+        NOW(),
+        NOW()
+    )
+    ON CONFLICT (agent_id) DO UPDATE SET
+        status = 'active',
+        last_request_at = NOW(),
+        requests_processed = agent_status.requests_processed + 1,
+        metadata = COALESCE(p_metadata, agent_status.metadata),
+        updated_at = NOW();
+END;
+$$;
+
+-- Grant execute permission to service role
+GRANT EXECUTE ON FUNCTION upsert_agent_heartbeat TO service_role;
+
+-- Optional: Function to mark inactive agents
+CREATE OR REPLACE FUNCTION mark_inactive_agents(
+    p_threshold_minutes INTEGER DEFAULT 5
+)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    affected_count INTEGER;
+BEGIN
+    UPDATE agent_status
+    SET status = 'inactive', updated_at = NOW()
+    WHERE status = 'active'
+    AND last_request_at < NOW() - (p_threshold_minutes || ' minutes')::INTERVAL;
+    
+    GET DIAGNOSTICS affected_count = ROW_COUNT;
+    RETURN affected_count;
 END;
 $$;
 ```
@@ -270,65 +362,72 @@ $$;
 ## Usage Examples
 
 ```typescript
-import { sendHeartbeat, sendHeartbeatAtomic, HeartbeatError } from './heartbeat';
+import { sendHeartbeat, sendHeartbeatDirect, HeartbeatError } from './heartbeat';
 
 // Basic usage
-async function basicExample() {
-  await sendHeartbeat(
-    'worker-agent-001',
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!
-  );
-}
+async function main() {
+  const agentId = 'worker-node-1';
+  const supabaseUrl = process.env.SUPABASE_URL!;
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY!;
 
-// With metadata
-async function withMetadataExample() {
-  await sendHeartbeat(
-    'worker-agent-001',
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_KEY!,
-    {
+  try {
+    // Using RPC function (recommended - atomic operation)
+    await sendHeartbeat(agentId, supabaseUrl, serviceKey, {
       version: '2.1.0',
-      hostname: 'worker-node-3',
-      memoryUsage: process.memoryUsage().heapUsed,
-      uptime: process.uptime(),
+      hostname: 'worker-1.example.com',
+      pid: process.pid
+    });
+    
+    console.log('Heartbeat sent successfully');
+  } catch (error) {
+    if (error instanceof HeartbeatError) {
+      console.error(`Heartbeat failed: ${error.message}`, {
+        statusCode: error.statusCode,
+        details: error.details
+      });
     }
-  );
+    throw error;
+  }
 }
 
-// Periodic heartbeat with error handling
-async function startHeartbeatLoop(agentId: string, intervalMs = 30000) {
-  const sendPulse = async () => {
+// Periodic heartbeat with interval
+function startHeartbeatInterval(
+  agentId: string,
+  supabaseUrl: string,
+  serviceKey: string,
+  intervalMs: number = 30000
+): () => void {
+  const sendBeat = async () => {
     try {
-      await sendHeartbeatAtomic(
-        agentId,
-        process.env.SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_KEY!,
-        { lastPulse: new Date().toISOString() }
-      );
-      console.log(`Heartbeat sent for ${agentId}`);
+      await sendHeartbeat(agentId, supabaseUrl, serviceKey, {
+        uptime: process.uptime(),
+        memoryUsage: process.memoryUsage().heapUsed
+      });
     } catch (error) {
-      if (error instanceof HeartbeatError) {
-        console.error(`Heartbeat failed for ${error.agentId}: ${error.message}`);
-      } else {
-        console.error('Unknown heartbeat error:', error);
-      }
+      console.error('Heartbeat failed:', error);
     }
   };
 
-  // Send initial heartbeat
-  await sendPulse();
+  // Send immediately, then at interval
+  sendBeat();
+  const intervalId = setInterval(sendBeat, intervalMs);
 
-  // Set up interval
-  return setInterval(sendPulse, intervalMs);
+  // Return cleanup function
+  return () => clearInterval(intervalId);
 }
 
-// Usage
-const heartbeatInterval = await startHeartbeatLoop('my-agent-001');
+// Usage with cleanup
+const stopHeartbeat = startHeartbeatInterval(
+  'my-agent',
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!,
+  30000 // Every 30 seconds
+);
 
-// Cleanup on shutdown
+// On shutdown
 process.on('SIGTERM', () => {
-  clearInterval(heartbeatInterval);
+  stopHeartbeat();
+  process.exit(0);
 });
 ```
 
@@ -336,9 +435,9 @@ process.on('SIGTERM', () => {
 
 | Feature | Description |
 |---------|-------------|
-| **Input Validation** | Validates all required parameters before making API calls |
-| **Type Safety** | Full TypeScript types for all parameters and return values |
-| **Atomic Operations** | Optional RPC-based version for high-concurrency scenarios |
-| **Error Handling** | Custom `HeartbeatError` class with agent ID context |
-| **Metadata Support** | Optional metadata field for storing agent-specific data |
-| **Timestamps** | Automatic tracking of `created_at` and `updated_at` |
+| **Atomic Increment** | Uses PostgreSQL function for race-condition-safe counter increment |
+| **Retry Logic** | Exponential backoff with configurable retries |
+| **Timeout Handling** | AbortController for request timeouts |
+| **Type Safety** | Full TypeScript types for all parameters and responses |
+| **Error Handling** | Custom `HeartbeatError` with status codes and details |
+| **Two Implementations** | RPC-based (atomic) and direct upsert options |
