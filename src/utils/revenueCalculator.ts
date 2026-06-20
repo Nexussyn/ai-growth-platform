@@ -1,6 +1,6 @@
 # AI Agent Platform Revenue Sharing Calculator
 
-A comprehensive TypeScript utility for calculating revenue distribution across an AI agent platform ecosystem.
+A comprehensive TypeScript utility for calculating revenue distribution in an AI agent platform ecosystem.
 
 ```typescript
 /**
@@ -12,468 +12,490 @@ A comprehensive TypeScript utility for calculating revenue distribution across a
  *   - Contributor Pool: 25% of platform revenue (3.75% of gross)
  *   - Platform Net: 75% of platform revenue (11.25% of gross)
  * - Referral Bonus: 25% of referred agent's net earnings
+ * 
+ * @module RevenueSharing
  */
 
 // ============================================================================
-// TYPES & INTERFACES
+// Type Definitions
 // ============================================================================
 
 /**
- * Configuration constants for revenue sharing percentages
+ * Percentage value between 0 and 100
+ */
+type Percentage = number;
+
+/**
+ * Monetary amount (non-negative)
+ */
+type Currency = number;
+
+/**
+ * Unique identifier for entities
+ */
+type EntityId = string;
+
+/**
+ * Timestamp in ISO 8601 format
+ */
+type ISOTimestamp = string;
+
+/**
+ * Configuration for revenue sharing percentages
  */
 interface RevenueShareConfig {
-  /** Percentage of gross revenue going to executing agent (0-1) */
-  readonly agentShare: number;
-  /** Percentage of gross revenue going to platform (0-1) */
-  readonly platformShare: number;
-  /** Percentage of platform revenue going to contributor pool (0-1) */
-  readonly contributorPoolShare: number;
-  /** Percentage of referred agent's net earnings going to referrer (0-1) */
-  readonly referralShare: number;
+  /** Percentage of gross revenue for executing agent (default: 85) */
+  readonly agentSharePercent: Percentage;
+  /** Percentage of gross revenue for platform (default: 15) */
+  readonly platformSharePercent: Percentage;
+  /** Percentage of platform revenue for contributor pool (default: 25) */
+  readonly contributorPoolPercent: Percentage;
+  /** Percentage of referred agent earnings for referrer (default: 25) */
+  readonly referralBonusPercent: Percentage;
 }
 
 /**
- * Represents a monetary amount with currency
+ * Breakdown of platform's revenue allocation
  */
-interface Money {
-  /** Amount in smallest currency unit (e.g., cents) */
-  readonly amount: number;
-  /** ISO 4217 currency code */
-  readonly currency: string;
-}
-
-/**
- * Unique identifier types for type safety
- */
-type AgentId = string & { readonly __brand: 'AgentId' };
-type TransactionId = string & { readonly __brand: 'TransactionId' };
-type ContributorId = string & { readonly __brand: 'ContributorId' };
-
-/**
- * Represents a single transaction on the platform
- */
-interface Transaction {
-  /** Unique transaction identifier */
-  readonly id: TransactionId;
-  /** ID of the agent that executed the task */
-  readonly executingAgentId: AgentId;
-  /** Gross revenue from the transaction */
-  readonly grossRevenue: Money;
-  /** ISO 8601 timestamp */
-  readonly timestamp: string;
-  /** Optional referrer agent ID */
-  readonly referrerAgentId?: AgentId;
-}
-
-/**
- * Breakdown of revenue distribution for a single transaction
- */
-interface RevenueBreakdown {
-  /** Original transaction reference */
-  readonly transactionId: TransactionId;
-  /** Gross revenue before any splits */
-  readonly grossRevenue: Money;
-  /** Amount going to the executing agent */
-  readonly agentEarnings: Money;
-  /** Total amount going to the platform */
-  readonly platformRevenue: Money;
+interface PlatformRevenueBreakdown {
+  /** Total platform revenue before internal distribution */
+  readonly grossPlatformRevenue: Currency;
   /** Amount allocated to contributor pool */
-  readonly contributorPoolAllocation: Money;
-  /** Platform's net revenue after contributor pool */
-  readonly platformNetRevenue: Money;
-  /** Referral bonus (if applicable) */
-  readonly referralBonus: Money | null;
-  /** Agent's final earnings after referral deduction */
-  readonly agentNetEarnings: Money;
+  readonly contributorPoolAmount: Currency;
+  /** Net platform revenue after contributor pool */
+  readonly netPlatformRevenue: Currency;
+  /** Percentage breakdowns for transparency */
+  readonly percentages: {
+    readonly contributorPoolOfGross: Percentage;
+    readonly netPlatformOfGross: Percentage;
+  };
 }
 
 /**
- * Contributor's share of the contributor pool
+ * Complete revenue distribution for a single transaction
+ */
+interface RevenueDistribution {
+  /** Original transaction amount */
+  readonly grossRevenue: Currency;
+  /** Amount for the executing agent */
+  readonly agentEarnings: Currency;
+  /** Detailed platform revenue breakdown */
+  readonly platformBreakdown: PlatformRevenueBreakdown;
+  /** Timestamp of calculation */
+  readonly calculatedAt: ISOTimestamp;
+  /** Configuration used for calculation */
+  readonly configUsed: RevenueShareConfig;
+}
+
+/**
+ * Referral relationship between agents
+ */
+interface ReferralRelationship {
+  /** ID of the agent who made the referral */
+  readonly referrerId: EntityId;
+  /** ID of the referred agent */
+  readonly referredAgentId: EntityId;
+  /** When the referral relationship was established */
+  readonly establishedAt: ISOTimestamp;
+  /** Whether the referral is still active */
+  readonly isActive: boolean;
+}
+
+/**
+ * Referral bonus calculation result
+ */
+interface ReferralBonus {
+  /** ID of the referrer receiving the bonus */
+  readonly referrerId: EntityId;
+  /** ID of the referred agent whose earnings triggered the bonus */
+  readonly referredAgentId: EntityId;
+  /** The referred agent's net earnings this bonus is based on */
+  readonly referredAgentEarnings: Currency;
+  /** The calculated referral bonus amount */
+  readonly bonusAmount: Currency;
+  /** Percentage used for calculation */
+  readonly bonusPercentage: Percentage;
+}
+
+/**
+ * Agent earnings with potential referral deductions
+ */
+interface AgentNetEarnings {
+  /** Agent's ID */
+  readonly agentId: EntityId;
+  /** Gross earnings before any deductions */
+  readonly grossEarnings: Currency;
+  /** Referral bonus paid to referrer (if applicable) */
+  readonly referralDeduction: Currency;
+  /** Final net earnings after all deductions */
+  readonly netEarnings: Currency;
+  /** Referrer information if applicable */
+  readonly referrerInfo: ReferralBonus | null;
+}
+
+/**
+ * Contributor in the pool
+ */
+interface Contributor {
+  /** Unique contributor ID */
+  readonly id: EntityId;
+  /** Contributor's name or identifier */
+  readonly name: string;
+  /** Contribution weight/score for pool distribution */
+  readonly contributionWeight: number;
+  /** Type of contribution */
+  readonly contributionType: ContributionType;
+}
+
+/**
+ * Types of contributions eligible for pool sharing
+ */
+type ContributionType = 
+  | 'model_training'
+  | 'data_provision'
+  | 'infrastructure'
+  | 'tooling'
+  | 'documentation'
+  | 'community_support';
+
+/**
+ * Individual contributor's share from the pool
  */
 interface ContributorShare {
-  /** Unique contributor identifier */
-  readonly contributorId: ContributorId;
-  /** Contributor's weight in the pool (0-1) */
-  readonly weight: number;
-  /** Calculated share amount */
-  readonly shareAmount: Money;
+  /** Contributor details */
+  readonly contributor: Contributor;
+  /** Share amount from the pool */
+  readonly shareAmount: Currency;
+  /** Percentage of pool received */
+  readonly poolPercentage: Percentage;
 }
 
 /**
- * Distribution of contributor pool among contributors
+ * Complete contributor pool distribution
  */
 interface ContributorPoolDistribution {
   /** Total pool amount being distributed */
-  readonly totalPoolAmount: Money;
+  readonly totalPoolAmount: Currency;
   /** Individual contributor shares */
   readonly shares: readonly ContributorShare[];
-  /** Timestamp of distribution calculation */
-  readonly calculatedAt: string;
+  /** Sum of all weights for reference */
+  readonly totalWeight: number;
+  /** Distribution timestamp */
+  readonly distributedAt: ISOTimestamp;
 }
 
 /**
- * Aggregated earnings for an agent over a period
+ * Complete transaction with all revenue calculations
  */
-interface AgentEarningsSummary {
-  /** Agent identifier */
-  readonly agentId: AgentId;
+interface TransactionRevenue {
+  /** Unique transaction ID */
+  readonly transactionId: EntityId;
+  /** Executing agent ID */
+  readonly agentId: EntityId;
+  /** Base revenue distribution */
+  readonly distribution: RevenueDistribution;
+  /** Agent's net earnings after referral deductions */
+  readonly agentNetEarnings: AgentNetEarnings;
+  /** Transaction metadata */
+  readonly metadata: {
+    readonly description: string;
+    readonly timestamp: ISOTimestamp;
+  };
+}
+
+/**
+ * Aggregated earnings report for an agent
+ */
+interface AgentEarningsReport {
+  /** Agent ID */
+  readonly agentId: EntityId;
+  /** Reporting period start */
+  readonly periodStart: ISOTimestamp;
+  /** Reporting period end */
+  readonly periodEnd: ISOTimestamp;
   /** Total gross revenue generated */
-  readonly totalGrossRevenue: Money;
-  /** Total earnings from executing tasks */
-  readonly totalExecutionEarnings: Money;
-  /** Total referral bonuses earned */
-  readonly totalReferralBonuses: Money;
-  /** Total referral deductions (paid to referrers) */
-  readonly totalReferralDeductions: Money;
-  /** Final net earnings */
-  readonly netEarnings: Money;
+  readonly totalGrossRevenue: Currency;
+  /** Total earnings before referral deductions */
+  readonly totalGrossEarnings: Currency;
+  /** Total referral deductions */
+  readonly totalReferralDeductions: Currency;
+  /** Total net earnings */
+  readonly totalNetEarnings: Currency;
   /** Number of transactions */
   readonly transactionCount: number;
-  /** Period start (ISO 8601) */
-  readonly periodStart: string;
-  /** Period end (ISO 8601) */
-  readonly periodEnd: string;
+  /** Referral bonuses earned (as a referrer) */
+  readonly referralBonusesEarned: Currency;
+  /** Final total earnings (net + referral bonuses) */
+  readonly finalTotalEarnings: Currency;
 }
 
 /**
- * Platform-wide revenue summary
+ * Platform-wide revenue report
  */
-interface PlatformRevenueSummary {
+interface PlatformRevenueReport {
+  /** Reporting period start */
+  readonly periodStart: ISOTimestamp;
+  /** Reporting period end */
+  readonly periodEnd: ISOTimestamp;
   /** Total gross revenue across all transactions */
-  readonly totalGrossRevenue: Money;
-  /** Total paid to agents */
-  readonly totalAgentPayouts: Money;
+  readonly totalGrossRevenue: Currency;
   /** Total platform revenue */
-  readonly totalPlatformRevenue: Money;
-  /** Total allocated to contributor pool */
-  readonly totalContributorPoolAllocation: Money;
-  /** Platform's net revenue */
-  readonly platformNetRevenue: Money;
+  readonly totalPlatformRevenue: Currency;
+  /** Total contributor pool amount */
+  readonly totalContributorPool: Currency;
+  /** Total net platform revenue */
+  readonly totalNetPlatformRevenue: Currency;
+  /** Total paid to agents */
+  readonly totalAgentPayouts: Currency;
   /** Total referral bonuses paid */
-  readonly totalReferralBonuses: Money;
-  /** Number of transactions */
+  readonly totalReferralBonuses: Currency;
+  /** Transaction count */
   readonly transactionCount: number;
-  /** Period start (ISO 8601) */
-  readonly periodStart: string;
-  /** Period end (ISO 8601) */
-  readonly periodEnd: string;
 }
-
-/**
- * Result type for operations that can fail
- */
-type Result<T, E = Error> = 
-  | { readonly success: true; readonly value: T }
-  | { readonly success: false; readonly error: E };
-
-/**
- * Validation error types
- */
-type ValidationError = 
-  | { readonly type: 'INVALID_AMOUNT'; readonly message: string }
-  | { readonly type: 'CURRENCY_MISMATCH'; readonly message: string }
-  | { readonly type: 'INVALID_PERCENTAGE'; readonly message: string }
-  | { readonly type: 'INVALID_WEIGHTS'; readonly message: string };
 
 // ============================================================================
-// CONSTANTS
+// Default Configuration
 // ============================================================================
 
 /**
  * Default revenue sharing configuration
+ * @constant
  */
 const DEFAULT_CONFIG: RevenueShareConfig = {
-  agentShare: 0.85,
-  platformShare: 0.15,
-  contributorPoolShare: 0.25,
-  referralShare: 0.25,
+  agentSharePercent: 85,
+  platformSharePercent: 15,
+  contributorPoolPercent: 25,
+  referralBonusPercent: 25,
 } as const;
 
 // ============================================================================
-// UTILITY FUNCTIONS
+// Utility Functions
 // ============================================================================
 
 /**
- * Creates a branded AgentId from a string
- * @param id - Raw string identifier
- * @returns Branded AgentId
- */
-const createAgentId = (id: string): AgentId => id as AgentId;
-
-/**
- * Creates a branded TransactionId from a string
- * @param id - Raw string identifier
- * @returns Branded TransactionId
- */
-const createTransactionId = (id: string): TransactionId => id as TransactionId;
-
-/**
- * Creates a branded ContributorId from a string
- * @param id - Raw string identifier
- * @returns Branded ContributorId
- */
-const createContributorId = (id: string): ContributorId => id as ContributorId;
-
-/**
- * Creates a Money object with validation
- * @param amount - Amount in smallest currency unit
- * @param currency - ISO 4217 currency code
- * @returns Result containing Money or validation error
- */
-const createMoney = (
-  amount: number,
-  currency: string
-): Result<Money, ValidationError> => {
-  if (!Number.isFinite(amount) || amount < 0) {
-    return {
-      success: false,
-      error: {
-        type: 'INVALID_AMOUNT',
-        message: `Invalid amount: ${amount}. Must be a non-negative finite number.`,
-      },
-    };
-  }
-
-  return {
-    success: true,
-    value: {
-      amount: Math.round(amount), // Ensure integer for currency precision
-      currency: currency.toUpperCase(),
-    },
-  };
-};
-
-/**
- * Creates a zero Money object for a given currency
- * @param currency - ISO 4217 currency code
- * @returns Money object with zero amount
- */
-const zeroMoney = (currency: string): Money => ({
-  amount: 0,
-  currency: currency.toUpperCase(),
-});
-
-/**
- * Adds two Money objects together
- * @param a - First money amount
- * @param b - Second money amount
- * @returns Result containing sum or currency mismatch error
- */
-const addMoney = (a: Money, b: Money): Result<Money, ValidationError> => {
-  if (a.currency !== b.currency) {
-    return {
-      success: false,
-      error: {
-        type: 'CURRENCY_MISMATCH',
-        message: `Cannot add ${a.currency} and ${b.currency}`,
-      },
-    };
-  }
-
-  return {
-    success: true,
-    value: {
-      amount: a.amount + b.amount,
-      currency: a.currency,
-    },
-  };
-};
-
-/**
- * Subtracts one Money object from another
- * @param a - Amount to subtract from
- * @param b - Amount to subtract
- * @returns Result containing difference or error
- */
-const subtractMoney = (a: Money, b: Money): Result<Money, ValidationError> => {
-  if (a.currency !== b.currency) {
-    return {
-      success: false,
-      error: {
-        type: 'CURRENCY_MISMATCH',
-        message: `Cannot subtract ${b.currency} from ${a.currency}`,
-      },
-    };
-  }
-
-  return {
-    success: true,
-    value: {
-      amount: Math.max(0, a.amount - b.amount),
-      currency: a.currency,
-    },
-  };
-};
-
-/**
- * Multiplies a Money amount by a percentage
- * @param money - Base money amount
- * @param percentage - Percentage as decimal (0-1)
- * @returns Result containing product or validation error
- */
-const multiplyMoney = (
-  money: Money,
-  percentage: number
-): Result<Money, ValidationError> => {
-  if (percentage < 0 || percentage > 1) {
-    return {
-      success: false,
-      error: {
-        type: 'INVALID_PERCENTAGE',
-        message: `Invalid percentage: ${percentage}. Must be between 0 and 1.`,
-      },
-    };
-  }
-
-  return {
-    success: true,
-    value: {
-      amount: Math.round(money.amount * percentage),
-      currency: money.currency,
-    },
-  };
-};
-
-/**
- * Formats Money for display
- * @param money - Money object to format
- * @param locale - Locale for formatting (default: 'en-US')
- * @returns Formatted currency string
- */
-const formatMoney = (money: Money, locale: string = 'en-US'): string => {
-  const formatter = new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: money.currency,
-  });
-  
-  // Convert from smallest unit (cents) to main unit (dollars)
-  return formatter.format(money.amount / 100);
-};
-
-// ============================================================================
-// CORE REVENUE CALCULATION FUNCTIONS
-// ============================================================================
-
-/**
- * Calculates the complete revenue breakdown for a single transaction
+ * Creates a validated revenue share configuration
  * 
- * @description
- * Splits gross revenue according to the platform's revenue sharing model:
- * - 85% to executing agent
- * - 15% to platform (of which 25% goes to contributor pool)
- * - If referred, 25% of agent's net earnings goes to referrer
- * 
- * @param transaction - The transaction to calculate revenue for
- * @param config - Revenue sharing configuration (defaults to platform standard)
- * @returns Result containing revenue breakdown or validation error
+ * @param partial - Partial configuration to merge with defaults
+ * @returns Complete validated configuration
+ * @throws Error if percentages are invalid
  * 
  * @example
  * ```typescript
- * const transaction: Transaction = {
- *   id: createTransactionId('txn-001'),
- *   executingAgentId: createAgentId('agent-001'),
- *   grossRevenue: { amount: 10000, currency: 'USD' }, // $100.00
- *   timestamp: new Date().toISOString(),
- *   referrerAgentId: createAgentId('agent-002'),
- * };
- * 
- * const result = calculateRevenueBreakdown(transaction);
- * if (result.success) {
- *   console.log(result.value.agentNetEarnings); // Agent's final earnings
- * }
+ * const config = createConfig({ agentSharePercent: 80 });
+ * // Returns: { agentSharePercent: 80, platformSharePercent: 15, ... }
  * ```
  */
-const calculateRevenueBreakdown = (
-  transaction: Transaction,
-  config: RevenueShareConfig = DEFAULT_CONFIG
-): Result<RevenueBreakdown, ValidationError> => {
-  const { grossRevenue } = transaction;
+const createConfig = (
+  partial: Partial<RevenueShareConfig> = {}
+): RevenueShareConfig => {
+  const config: RevenueShareConfig = {
+    ...DEFAULT_CONFIG,
+    ...partial,
+  };
 
-  // Calculate agent's base earnings (85%)
-  const agentEarningsResult = multiplyMoney(grossRevenue, config.agentShare);
-  if (!agentEarningsResult.success) return agentEarningsResult;
-  const agentEarnings = agentEarningsResult.value;
-
-  // Calculate platform's total revenue (15%)
-  const platformRevenueResult = multiplyMoney(grossRevenue, config.platformShare);
-  if (!platformRevenueResult.success) return platformRevenueResult;
-  const platformRevenue = platformRevenueResult.value;
-
-  // Calculate contributor pool allocation (25% of platform revenue = 3.75% of gross)
-  const contributorPoolResult = multiplyMoney(platformRevenue, config.contributorPoolShare);
-  if (!contributorPoolResult.success) return contributorPoolResult;
-  const contributorPoolAllocation = contributorPoolResult.value;
-
-  // Calculate platform's net revenue (75% of platform revenue = 11.25% of gross)
-  const platformNetResult = subtractMoney(platformRevenue, contributorPoolAllocation);
-  if (!platformNetResult.success) return platformNetResult;
-  const platformNetRevenue = platformNetResult.value;
-
-  // Calculate referral bonus if applicable
-  let referralBonus: Money | null = null;
-  let agentNetEarnings = agentEarnings;
-
-  if (transaction.referrerAgentId) {
-    const referralBonusResult = multiplyMoney(agentEarnings, config.referralShare);
-    if (!referralBonusResult.success) return referralBonusResult;
-    referralBonus = referralBonusResult.value;
-
-    const agentNetResult = subtractMoney(agentEarnings, referralBonus);
-    if (!agentNetResult.success) return agentNetResult;
-    agentNetEarnings = agentNetResult.value;
+  // Validate percentages
+  if (config.agentSharePercent + config.platformSharePercent !== 100) {
+    throw new Error(
+      `Agent share (${config.agentSharePercent}%) and platform share ` +
+      `(${config.platformSharePercent}%) must sum to 100%`
+    );
   }
 
-  return {
-    success: true,
-    value: {
-      transactionId: transaction.id,
-      grossRevenue,
-      agentEarnings,
-      platformRevenue,
-      contributorPoolAllocation,
-      platformNetRevenue,
-      referralBonus,
-      agentNetEarnings,
+  const percentages = [
+    config.agentSharePercent,
+    config.platformSharePercent,
+    config.contributorPoolPercent,
+    config.referralBonusPercent,
+  ];
+
+  if (percentages.some(p => p < 0 || p > 100)) {
+    throw new Error('All percentages must be between 0 and 100');
+  }
+
+  return config;
+};
+
+/**
+ * Calculates percentage of an amount
+ * 
+ * @param amount - Base amount
+ * @param percentage - Percentage to calculate
+ * @returns Calculated amount rounded to 2 decimal places
+ * 
+ * @example
+ * ```typescript
+ * calculatePercentage(1000, 15); // Returns: 150
+ * ```
+ */
+const calculatePercentage = (
+  amount: Currency,
+  percentage: Percentage
+): Currency => {
+  if (amount < 0) {
+    throw new Error('Amount cannot be negative');
+  }
+  return Math.round((amount * percentage / 100) * 100) / 100;
+};
+
+/**
+ * Gets current ISO timestamp
+ * 
+ * @returns Current timestamp in ISO 8601 format
+ */
+const getCurrentTimestamp = (): ISOTimestamp => new Date().toISOString();
+
+// ============================================================================
+// Core Revenue Calculation Functions
+// ============================================================================
+
+/**
+ * Calculates the complete revenue distribution for a transaction
+ * 
+ * @param grossRevenue - Total transaction revenue
+ * @param config - Revenue sharing configuration (optional, uses defaults)
+ * @returns Complete revenue distribution breakdown
+ * 
+ * @example
+ * ```typescript
+ * const distribution = calculateRevenueDistribution(1000);
+ * // Returns:
+ * // {
+ * //   grossRevenue: 1000,
+ * //   agentEarnings: 850,
+ * //   platformBreakdown: {
+ * //     grossPlatformRevenue: 150,
+ * //     contributorPoolAmount: 37.5,
+ * //     netPlatformRevenue: 112.5,
+ * //     ...
+ * //   },
+ * //   ...
+ * // }
+ * ```
+ */
+const calculateRevenueDistribution = (
+  grossRevenue: Currency,
+  config: RevenueShareConfig = DEFAULT_CONFIG
+): RevenueDistribution => {
+  if (grossRevenue < 0) {
+    throw new Error('Gross revenue cannot be negative');
+  }
+
+  const agentEarnings = calculatePercentage(grossRevenue, config.agentSharePercent);
+  const grossPlatformRevenue = calculatePercentage(grossRevenue, config.platformSharePercent);
+  const contributorPoolAmount = calculatePercentage(
+    grossPlatformRevenue,
+    config.contributorPoolPercent
+  );
+  const netPlatformRevenue = grossPlatformRevenue - contributorPoolAmount;
+
+  const platformBreakdown: PlatformRevenueBreakdown = {
+    grossPlatformRevenue,
+    contributorPoolAmount,
+    netPlatformRevenue,
+    percentages: {
+      contributorPoolOfGross: (contributorPoolAmount / grossRevenue) * 100,
+      netPlatformOfGross: (netPlatformRevenue / grossRevenue) * 100,
     },
+  };
+
+  return {
+    grossRevenue,
+    agentEarnings,
+    platformBreakdown,
+    calculatedAt: getCurrentTimestamp(),
+    configUsed: config,
   };
 };
 
 /**
- * Calculates revenue breakdown for multiple transactions
+ * Calculates referral bonus based on referred agent's earnings
  * 
- * @param transactions - Array of transactions to process
+ * @param referredAgentEarnings - Net earnings of the referred agent
+ * @param referralRelationship - The referral relationship details
  * @param config - Revenue sharing configuration
- * @returns Result containing array of breakdowns or first error encountered
- */
-const calculateBatchRevenueBreakdown = (
-  transactions: readonly Transaction[],
-  config: RevenueShareConfig = DEFAULT_CONFIG
-): Result<readonly RevenueBreakdown[], ValidationError> => {
-  const breakdowns: RevenueBreakdown[] = [];
-
-  for (const transaction of transactions) {
-    const result = calculateRevenueBreakdown(transaction, config);
-    if (!result.success) return result;
-    breakdowns.push(result.value);
-  }
-
-  return { success: true, value: breakdowns };
-};
-
-/**
- * Distributes contributor pool among contributors based on their weights
- * 
- * @description
- * Allocates the contributor pool proportionally based on each contributor's
- * weight. Weights must sum to 1.0 (100%).
- * 
- * @param poolAmount - Total amount to distribute
- * @param contributors - Array of contributor IDs and their weights
- * @returns Result containing distribution or validation error
+ * @returns Referral bonus calculation result
  * 
  * @example
  * ```typescript
- * const distribution = distributeContributorPool(
- *   { amount: 3750, currency: 'USD' }, // $37.50
- *   [
- *     { contributorId: createContributor
+ * const relationship: ReferralRelationship = {
+ *   referrerId: 'agent-001',
+ *   referredAgentId: 'agent-002',
+ *   establishedAt: '2024-01-01T00:00:00Z',
+ *   isActive: true,
+ * };
+ * const bonus = calculateReferralBonus(850, relationship);
+ * // Returns: { bonusAmount: 212.5, ... }
+ * ```
+ */
+const calculateReferralBonus = (
+  referredAgentEarnings: Currency,
+  referralRelationship: ReferralRelationship,
+  config: RevenueShareConfig = DEFAULT_CONFIG
+): ReferralBonus => {
+  if (!referralRelationship.isActive) {
+    return {
+      referrerId: referralRelationship.referrerId,
+      referredAgentId: referralRelationship.referredAgentId,
+      referredAgentEarnings,
+      bonusAmount: 0,
+      bonusPercentage: 0,
+    };
+  }
+
+  const bonusAmount = calculatePercentage(
+    referredAgentEarnings,
+    config.referralBonusPercent
+  );
+
+  return {
+    referrerId: referralRelationship.referrerId,
+    referredAgentId: referralRelationship.referredAgentId,
+    referredAgentEarnings,
+    bonusAmount,
+    bonusPercentage: config.referralBonusPercent,
+  };
+};
+
+/**
+ * Calculates agent's net earnings including referral deductions
+ * 
+ * @param agentId - The agent's unique identifier
+ * @param grossEarnings - Agent's gross earnings from revenue share
+ * @param referralRelationship - Optional referral relationship (if agent was referred)
+ * @param config - Revenue sharing configuration
+ * @returns Agent's complete net earnings breakdown
+ * 
+ * @example
+ * ```typescript
+ * const netEarnings = calculateAgentNetEarnings('agent-002', 850, referralRelationship);
+ * // Returns net earnings after referral deduction to referrer
+ * ```
+ */
+const calculateAgentNetEarnings = (
+  agentId: EntityId,
+  grossEarnings: Currency,
+  referralRelationship: ReferralRelationship | null = null,
+  config: RevenueShareConfig = DEFAULT_CONFIG
+): AgentNetEarnings => {
+  if (referralRelationship === null || !referralRelationship.isActive) {
+    return {
+      agentId,
+      grossEarnings,
+      referralDeduction: 0,
+      netEarnings: grossEarnings,
+      referrerInfo: null,
+    };
+  }
+
+  const referralBonus = calculateReferralBonus(
+    grossEarnings,
+    referralRelationship,
+    config
+  );
+
+  return {
+    agentId,
+    grossEarnings,
+    referralDeduction: referralBonus.bonusAmount,
+    netEarnings: grossEarnings - referralBonus.bonusAmount,
+    referrer
