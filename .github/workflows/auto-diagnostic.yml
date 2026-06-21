@@ -1,0 +1,69 @@
+name: Auto Diagnostic Bundle
+
+on:
+  push:
+    branches:
+      - 'feat/**'
+      - 'fix/**'
+      - 'chore/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build-diagnostic:
+    name: Run build.py and commit diagnostic bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc g++ cmake make lua5.4 luajit ruby ghc
+
+      - name: Make encryptly executable
+        run: |
+          chmod +x tools/encryptly/linux-x64/encryptly || true
+          chmod +x tools/encryptly/linux-arm64/encryptly || true
+          chmod +x tools/encryptly/encryptly || true
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run build.py
+        run: python3 build.py
+        continue-on-error: true
+
+      - name: Push diagnostic bundle
+        run: |
+          # build.py already calls git add + git commit internally.
+          # We just need to push what was committed.
+          git push origin HEAD
