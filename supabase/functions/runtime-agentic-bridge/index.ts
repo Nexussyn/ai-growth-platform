@@ -9,6 +9,9 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+const ANTHROPIC_MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20240620";
+const ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1/messages";
 
 type ProviderResult = {
   connector: string;
@@ -51,6 +54,64 @@ async function callPollinationsLLM(prompt: string, systemPrompt?: string, connec
     excerpt = text.slice(0, 1200);
   }
   return { connector, endpoint: url, status_code: r.status, response_hash: hash, excerpt, raw_size: text.length, ok: r.ok && excerpt.length > 0 };
+}
+
+async function callAnthropic(prompt: string, systemPrompt = "You are a concise reasoning assistant. Use evidence and be specific."): Promise<ProviderResult> {
+  if (!ANTHROPIC_API_KEY) {
+    return {
+      connector: "anthropic_claude",
+      endpoint: ANTHROPIC_BASE_URL,
+      status_code: 401,
+      response_hash: "",
+      excerpt: "",
+      raw_size: 0,
+      ok: false,
+    };
+  }
+
+  const payload = {
+    model: ANTHROPIC_MODEL,
+    max_tokens: 700,
+    temperature: 0.2,
+    system: systemPrompt,
+    messages: [{ role: "user", content: prompt }],
+  };
+
+  const r = await fetch(ANTHROPIC_BASE_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await r.text();
+  const hash = await sha256Hex(text);
+  let excerpt = "";
+  try {
+    const json = JSON.parse(text);
+    const textBlocks = Array.isArray(json?.content) ? json.content
+      .filter((block: Record<string, unknown>) => String(block?.type ?? "") === "text")
+      .map((block: Record<string, unknown>) => String(block.text ?? "")) : [];
+    excerpt = textBlocks.join("\n").slice(0, 1200);
+    if (!excerpt && json?.content?.[0]?.text) {
+      excerpt = String(json.content[0].text).slice(0, 1200);
+    }
+  } catch {
+    excerpt = text.slice(0, 1200);
+  }
+
+  return {
+    connector: "anthropic_claude",
+    endpoint: ANTHROPIC_BASE_URL,
+    status_code: r.status,
+    response_hash: hash,
+    excerpt,
+    raw_size: text.length,
+    ok: r.ok && excerpt.length > 0,
+  };
 }
 
 async function callPollinationsCode(prompt: string): Promise<ProviderResult> {
@@ -202,6 +263,21 @@ function pickProviderForJob(taskKind: string, agentRole: string, payload: Record
   const k = (taskKind || "").toLowerCase();
   const r = (agentRole || "").toLowerCase();
   const hint = String(payload?.provider_hint || "").toLowerCase();
+
+  const prompt = String(
+    payload?.prompt ||
+      payload?.query ||
+      payload?.title ||
+      payload?.summary ||
+      payload?.url ||
+      "Summarize the open-source agentic task and return one practical first step.",
+  );
+
+  const isClaudeHint = hint === "anthropic" || hint === "claude";
+  const shouldUseClaude = Boolean(ANTHROPIC_API_KEY) && (isClaudeHint || hint === "" && (k.includes("bounty") || k.includes("analysis") || k.includes("recruiter") || k.includes("research")));
+  if (shouldUseClaude) {
+    return { call: () => callAnthropic(prompt, "You are a strict execution intelligence assistant. Answer with concise operational steps."), connector: "anthropic_claude" };
+  }
 
   if (hint === "pollinations") return { call: () => callPollinationsLLM(String(payload?.prompt || "Summarize the open-source agentic AI landscape in two sentences.")), connector: "pollinations_text" };
   if (hint === "code") return { call: () => callPollinationsCode(String(payload?.prompt || "Write a small TypeScript helper with Vitest tests.")), connector: "pollinations_code" };
