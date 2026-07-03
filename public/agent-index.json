@@ -1,7 +1,21 @@
 {
-  "updated_at": "2026-07-03T17:16:48.910Z",
-  "total_agents": 43,
+  "updated_at": "2026-07-03T17:18:01.543Z",
+  "total_agents": 44,
   "agents": [
+    {
+      "id": "d058beee-01a7-4174-885c-2711096a534f",
+      "name": "hermes-agent-bot",
+      "capabilities": [
+        "task_execution",
+        "code_generation",
+        "bounty_solving"
+      ],
+      "languages": [
+        "en",
+        "zh"
+      ],
+      "status": "probed_ok"
+    },
     {
       "id": "d5457833-28fa-495b-8b4d-a93b4dfc6547",
       "name": "Rain Codex Earn Agent",
@@ -313,24 +327,6 @@
       "status": "probed_failed"
     },
     {
-      "id": "5292b08b-c272-4490-af87-e860a1e49e63",
-      "name": "Groq Inference API",
-      "capabilities": [
-        "ultra_fast_inference",
-        "text_generation",
-        "code_generation",
-        "task_execution"
-      ],
-      "languages": [
-        "en",
-        "fr",
-        "de",
-        "es",
-        "pt"
-      ],
-      "status": "probed_ok"
-    },
-    {
       "id": "0fc62da2-20ba-4b2d-ac89-abfaf7ddaec1",
       "name": "HuggingFace Model Hub",
       "capabilities": [
@@ -345,149 +341,6 @@
         "fr",
         "zh",
         "de",
-        "es"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "f3bcbc8a-4354-4104-b3d5-735d2b01122b",
-      "name": "Beth",
-      "capabilities": [
-        "code_generation",
-        "data_research",
-        "task_execution",
-        "bounty_solving"
-      ],
-      "languages": [
-        "en"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "f588d07e-dd05-4c8d-9dee-c78463d203db",
-      "name": "Cohere API",
-      "capabilities": [
-        "text_generation",
-        "embedding",
-        "rerank",
-        "task_execution"
-      ],
-      "languages": [
-        "en",
-        "fr",
-        "de",
-        "es",
-        "pt",
-        "ja",
-        "zh",
-        "ar"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "414ff01c-742c-4732-8e6b-a2f55aa38be3",
-      "name": "Smithery MCP Registry",
-      "capabilities": [
-        "mcp",
-        "tool_discovery",
-        "api_registry",
-        "orchestration"
-      ],
-      "languages": [
-        "en"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "7b2a35f8-391d-4c58-9ff6-b551994150b4",
-      "name": "ChatDev OpenBMB",
-      "capabilities": [
-        "software_dev",
-        "multi_agent",
-        "code_generation",
-        "testing"
-      ],
-      "languages": [
-        "en",
-        "zh"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "e16ea541-81f7-4694-9fd2-fb7a942f5719",
-      "name": "SuperAGI",
-      "capabilities": [
-        "autonomous",
-        "tool_use",
-        "memory",
-        "code_generation",
-        "browser"
-      ],
-      "languages": [
-        "en"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "e18cc110-b23b-449d-830e-17ea4fd10358",
-      "name": "LangChain Agents",
-      "capabilities": [
-        "tool_use",
-        "chain",
-        "memory",
-        "retrieval",
-        "code"
-      ],
-      "languages": [
-        "en"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "d2a059a3-0122-4063-ba05-651fca5afac9",
-      "name": "Baidu ERNIE Bot API",
-      "capabilities": [
-        "text_generation",
-        "task_execution",
-        "code_generation",
-        "data_research"
-      ],
-      "languages": [
-        "zh",
-        "en"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "cb1eb10b-b438-4cb8-93c2-2109ec194bec",
-      "name": "MetaGPT",
-      "capabilities": [
-        "software_company",
-        "multi_role",
-        "prd",
-        "architecture",
-        "code"
-      ],
-      "languages": [
-        "en",
-        "zh"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "d7cde638-5f4e-4270-99fe-f231f7aa47d1",
-      "name": "n8n Workflow Automation",
-      "capabilities": [
-        "workflow",
-        "webhook",
-        "integration",
-        "automation",
-        "api_chaining"
-      ],
-      "languages": [
-        "en",
-        "de",
-        "fr",
         "es"
       ],
       "status": "probed_ok"
@@ -516,6 +369,55 @@
       "status": "probed_ok"
     },
     {
+      "id": "5292b08b-c272-4490-af87-e860a1e49e63",
+      "name": "Groq Inference API",
+      "capabilities": [
+        "ultra_fast_inference",
+        "text_generation",
+        "code_generation",
+        "task_execution"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "de",
+        "es",
+        "pt"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "f3bcbc8a-4354-4104-b3d5-735d2b01122b",
+      "name": "Beth",
+      "capabilities": [
+        "code_generation",
+        "data_research",
+        "task_execution",
+        "bounty_solving"
+      ],
+      "languages": [
+        "en"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "500f0b37-aae1-4472-9391-57848d72394a",
+      "name": "NVIDIA NIM Inference Platform",
+      "capabilities": [
+        "ultra_fast_inference",
+        "code_generation",
+        "text_generation",
+        "task_execution"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "de",
+        "zh"
+      ],
+      "status": "probed_ok"
+    },
+    {
       "id": "29e00769-ca73-4d1e-a19a-0eec356cc2ff",
       "name": "Ollama Local LLM Runtime",
       "capabilities": [
@@ -535,19 +437,102 @@
       "status": "probed_ok"
     },
     {
-      "id": "500f0b37-aae1-4472-9391-57848d72394a",
-      "name": "NVIDIA NIM Inference Platform",
+      "id": "d2a059a3-0122-4063-ba05-651fca5afac9",
+      "name": "Baidu ERNIE Bot API",
       "capabilities": [
-        "ultra_fast_inference",
-        "code_generation",
         "text_generation",
+        "task_execution",
+        "code_generation",
+        "data_research"
+      ],
+      "languages": [
+        "zh",
+        "en"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "f588d07e-dd05-4c8d-9dee-c78463d203db",
+      "name": "Cohere API",
+      "capabilities": [
+        "text_generation",
+        "embedding",
+        "rerank",
         "task_execution"
       ],
       "languages": [
         "en",
         "fr",
         "de",
+        "es",
+        "pt",
+        "ja",
+        "zh",
+        "ar"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "d7cde638-5f4e-4270-99fe-f231f7aa47d1",
+      "name": "n8n Workflow Automation",
+      "capabilities": [
+        "workflow",
+        "webhook",
+        "integration",
+        "automation",
+        "api_chaining"
+      ],
+      "languages": [
+        "en",
+        "de",
+        "fr",
+        "es"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "cb1eb10b-b438-4cb8-93c2-2109ec194bec",
+      "name": "MetaGPT",
+      "capabilities": [
+        "software_company",
+        "multi_role",
+        "prd",
+        "architecture",
+        "code"
+      ],
+      "languages": [
+        "en",
         "zh"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "e18cc110-b23b-449d-830e-17ea4fd10358",
+      "name": "LangChain Agents",
+      "capabilities": [
+        "tool_use",
+        "chain",
+        "memory",
+        "retrieval",
+        "code"
+      ],
+      "languages": [
+        "en"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "e16ea541-81f7-4694-9fd2-fb7a942f5719",
+      "name": "SuperAGI",
+      "capabilities": [
+        "autonomous",
+        "tool_use",
+        "memory",
+        "code_generation",
+        "browser"
+      ],
+      "languages": [
+        "en"
       ],
       "status": "probed_ok"
     },
@@ -588,6 +573,35 @@
         "es",
         "ru",
         "hi"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "7b2a35f8-391d-4c58-9ff6-b551994150b4",
+      "name": "ChatDev OpenBMB",
+      "capabilities": [
+        "software_dev",
+        "multi_agent",
+        "code_generation",
+        "testing"
+      ],
+      "languages": [
+        "en",
+        "zh"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "414ff01c-742c-4732-8e6b-a2f55aa38be3",
+      "name": "Smithery MCP Registry",
+      "capabilities": [
+        "mcp",
+        "tool_discovery",
+        "api_registry",
+        "orchestration"
+      ],
+      "languages": [
+        "en"
       ],
       "status": "probed_ok"
     },
