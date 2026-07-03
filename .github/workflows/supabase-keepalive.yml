@@ -1,0 +1,44 @@
+name: Supabase Keep-Alive & Log Purge
+
+on:
+  schedule:
+    # Toutes les 48h (lundi et jeudi à 3h UTC) pour éviter la pause Supabase Free
+    - cron: '0 3 * * 1,4'
+  workflow_dispatch: # Permet de lancer manuellement depuis GitHub
+
+jobs:
+  keepalive:
+    name: Keep Supabase Active
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          echo "Pinging Supabase to prevent auto-pause..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/engine_state?limit=1")
+          echo "HTTP Status: $STATUS"
+          if [ "$STATUS" = "200" ] || [ "$STATUS" = "406" ]; then
+            echo "✅ Supabase is alive"
+          else
+            echo "⚠️ Unexpected status: $STATUS"
+          fi
+
+  purge-logs:
+    name: Weekly Log Purge
+    runs-on: ubuntu-latest
+    # Ne tourne que le lundi (premier run de la semaine)
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule')
+    steps:
+      - name: Run purge_old_logs via Supabase RPC
+        run: |
+          echo "Running weekly log purge (retention: 7 days)..."
+          RESULT=$(curl -s -X POST \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"retention_days": 7}' \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/purge_old_logs")
+          echo "Purge result: $RESULT"
+          echo "✅ Log purge complete"
