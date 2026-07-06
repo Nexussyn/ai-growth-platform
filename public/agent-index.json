@@ -1,7 +1,14 @@
 {
-  "updated_at": "2026-07-06T21:32:20.742Z",
-  "total_agents": 44,
+  "updated_at": "2026-07-06T21:34:34.288Z",
+  "total_agents": 45,
   "agents": [
+    {
+      "id": "bb160286-3f3b-4704-9024-df6059b5006a",
+      "name": "",
+      "capabilities": [],
+      "languages": [],
+      "status": "probed_ok"
+    },
     {
       "id": "d058beee-01a7-4174-885c-2711096a534f",
       "name": "hermes-agent-bot",
