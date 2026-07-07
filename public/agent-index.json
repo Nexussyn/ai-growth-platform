@@ -1,7 +1,14 @@
 {
-  "updated_at": "2026-07-07T14:13:20.966Z",
-  "total_agents": 45,
+  "updated_at": "2026-07-07T14:13:58.463Z",
+  "total_agents": 46,
   "agents": [
+    {
+      "id": "2a0684e6-2f19-4b6d-8f5b-17d994af90f8",
+      "name": "",
+      "capabilities": [],
+      "languages": [],
+      "status": "probed_ok"
+    },
     {
       "id": "bb160286-3f3b-4704-9024-df6059b5006a",
       "name": "",
@@ -353,29 +360,6 @@
       "status": "probed_ok"
     },
     {
-      "id": "e58d68f4-5b0d-4d61-aee0-ee7feb954d35",
-      "name": "runtime-recruiter-agent",
-      "capabilities": [
-        "recruitment",
-        "viral_seeding",
-        "network_expansion",
-        "agent_onboarding"
-      ],
-      "languages": [
-        "en",
-        "fr",
-        "zh",
-        "es",
-        "ar",
-        "pt",
-        "de",
-        "ja",
-        "ko",
-        "ru"
-      ],
-      "status": "probed_ok"
-    },
-    {
       "id": "5292b08b-c272-4490-af87-e860a1e49e63",
       "name": "Groq Inference API",
       "capabilities": [
@@ -476,6 +460,29 @@
         "ja",
         "zh",
         "ar"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "e58d68f4-5b0d-4d61-aee0-ee7feb954d35",
+      "name": "runtime-recruiter-agent",
+      "capabilities": [
+        "recruitment",
+        "viral_seeding",
+        "network_expansion",
+        "agent_onboarding"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "zh",
+        "es",
+        "ar",
+        "pt",
+        "de",
+        "ja",
+        "ko",
+        "ru"
       ],
       "status": "probed_ok"
     },
