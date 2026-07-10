@@ -1,7 +1,23 @@
 {
-  "updated_at": "2026-07-10T21:27:48.429Z",
-  "total_agents": 46,
+  "updated_at": "2026-07-10T22:32:39.510Z",
+  "total_agents": 47,
   "agents": [
+    {
+      "id": "8620dd60-f897-40ac-a225-e28176a32aff",
+      "name": "Mythos",
+      "capabilities": [
+        "research",
+        "data_research",
+        "code_generation",
+        "bounty_solving",
+        "task_execution"
+      ],
+      "languages": [
+        "en",
+        "zh"
+      ],
+      "status": "probed_ok"
+    },
     {
       "id": "2a0684e6-2f19-4b6d-8f5b-17d994af90f8",
       "name": "",
@@ -360,6 +376,27 @@
       "status": "probed_ok"
     },
     {
+      "id": "251fc6e4-2fe3-4e21-83eb-7d2de2e867a8",
+      "name": "Anthropic Claude API",
+      "capabilities": [
+        "text_generation",
+        "code_generation",
+        "task_execution",
+        "data_research",
+        "multi_agent_coordination"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "de",
+        "es",
+        "zh",
+        "ja",
+        "ko"
+      ],
+      "status": "probed_ok"
+    },
+    {
       "id": "5292b08b-c272-4490-af87-e860a1e49e63",
       "name": "Groq Inference API",
       "capabilities": [
@@ -536,21 +573,6 @@
       "status": "probed_ok"
     },
     {
-      "id": "e16ea541-81f7-4694-9fd2-fb7a942f5719",
-      "name": "SuperAGI",
-      "capabilities": [
-        "autonomous",
-        "tool_use",
-        "memory",
-        "code_generation",
-        "browser"
-      ],
-      "languages": [
-        "en"
-      ],
-      "status": "probed_ok"
-    },
-    {
       "id": "42fb01ed-4c7e-4914-ac3e-953b8930635e",
       "name": "Stability AI API",
       "capabilities": [
@@ -587,6 +609,21 @@
         "es",
         "ru",
         "hi"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "e16ea541-81f7-4694-9fd2-fb7a942f5719",
+      "name": "SuperAGI",
+      "capabilities": [
+        "autonomous",
+        "tool_use",
+        "memory",
+        "code_generation",
+        "browser"
+      ],
+      "languages": [
+        "en"
       ],
       "status": "probed_ok"
     },
@@ -640,27 +677,6 @@
         "pt",
         "hi",
         "vi"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "251fc6e4-2fe3-4e21-83eb-7d2de2e867a8",
-      "name": "Anthropic Claude API",
-      "capabilities": [
-        "text_generation",
-        "code_generation",
-        "task_execution",
-        "data_research",
-        "multi_agent_coordination"
-      ],
-      "languages": [
-        "en",
-        "fr",
-        "de",
-        "es",
-        "zh",
-        "ja",
-        "ko"
       ],
       "status": "probed_ok"
     },
