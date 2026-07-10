@@ -25,6 +25,7 @@ type Opportunity = {
   title: string;
   url: string;
   reward_usd: number | null;
+  tech_stack: string[];
   raw: Record<string, unknown>;
 };
 
@@ -75,6 +76,22 @@ function extractUsd(text: string): number | null {
     }
   }
   return null;
+}
+
+function inferTechStack(text: string): string[] {
+  const haystack = text.toLowerCase();
+  const tags: string[] = [];
+  const add = (tag: string, pattern: RegExp) => {
+    if (pattern.test(haystack) && !tags.includes(tag)) tags.push(tag);
+  };
+  add("typescript", /\b(ts|typescript|javascript|sdk|react|node|npm|vite)\b/);
+  add("python", /\b(python|py|django|fastapi|jupyter)\b/);
+  add("ai", /\b(ai|agent|rag|llm|model|embedding|summari[sz]ation)\b/);
+  add("mcp", /\bmcp\b/);
+  add("database", /\b(qdrant|postgres|sqlite|chroma|vector|database|sql)\b/);
+  add("aws", /\b(aws|comprehend|s3|lambda)\b/);
+  add("docs", /\b(docs?|documentation|reference|content)\b/);
+  return tags;
 }
 
 // priority scales with reward; unknown reward gets a small baseline.
@@ -132,6 +149,7 @@ async function fetchGitcoin(): Promise<Opportunity[]> {
       title: name,
       url,
       reward_usd: reward,
+      tech_stack: inferTechStack(name),
       raw: {
         round_id: id,
         chain_id: chainId,
@@ -184,6 +202,7 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
         title,
         url: html,
         reward_usd: reward,
+        tech_stack: inferTechStack(`${repo} ${title} ${body}`),
         raw: {
           repo,
           number: Number(it.number ?? 0),
@@ -199,43 +218,173 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
   return out;
 }
 
-// --- Source 3: Algora public bounties (best-effort, no key) ---
-// If the public endpoint is unreachable or its shape changes, ignore cleanly.
-async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
-  });
-  if (!r.ok) return [];
-  const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
-  const out: Opportunity[] = [];
-  for (const it of items) {
-    const url = String(it.url || it.html_url || it.link || "");
-    if (!url || !/^https?:\/\//.test(url)) continue;
-    const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
-    const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
-    let reward: number | null = null;
-    if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
-      const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
-      if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
-    } else if (typeof it.amount_usd === "number") {
-      reward = it.amount_usd as number;
-    } else {
-      reward = extractUsd(title);
+type AlgoraApiBounty = {
+  title?: unknown;
+  url?: unknown;
+  html_url?: unknown;
+  link?: unknown;
+  reward?: unknown;
+  amount?: unknown;
+  amount_usd?: unknown;
+  reward_usd?: unknown;
+  reward_formatted?: unknown;
+  status?: unknown;
+  org?: unknown;
+  organization?: unknown;
+  task?: unknown;
+};
+
+const ALGORA_API_URL = "https://algora.io/api/bounties?status=open&limit=50";
+const ALGORA_FALLBACK_ORGS = [
+  "PrimeIntellect-ai",
+  "SCIBASE.AI",
+  "unsiloed-ai",
+  "daytonaio",
+  "archestra-ai",
+  "arakoodev",
+  "tscircuit",
+  "triggerdotdev",
+];
+
+function extractAlgoraReward(value: unknown, fallbackText = ""): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  if (typeof value === "string") return extractUsd(value);
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const direct = extractAlgoraReward(obj.amount ?? obj.value ?? obj.usd ?? obj.cents, fallbackText);
+    if (direct != null) {
+      const currency = String(obj.currency ?? obj.currency_code ?? "USD").toUpperCase();
+      const units = String(obj.units ?? "").toLowerCase();
+      return currency === "USD" && (units === "cents" || direct >= 1000) ? direct / 100 : direct;
     }
+  }
+  return extractUsd(fallbackText);
+}
+
+function parseAlgoraApiItems(payload: unknown): AlgoraApiBounty[] {
+  if (Array.isArray(payload)) return payload as AlgoraApiBounty[];
+  if (!payload || typeof payload !== "object") return [];
+  const obj = payload as Record<string, unknown>;
+  for (const key of ["items", "bounties", "data", "results"]) {
+    if (Array.isArray(obj[key])) return obj[key] as AlgoraApiBounty[];
+  }
+  return [];
+}
+
+function normalizeAlgoraApiBounty(item: AlgoraApiBounty): Opportunity | null {
+  const task = item.task && typeof item.task === "object" ? (item.task as Record<string, unknown>) : {};
+  const url = String(item.url || item.html_url || item.link || task.url || "");
+  if (!url || !/^https?:\/\//.test(url)) return null;
+  const title = String(item.title || task.title || item.task || item.reward_formatted || "Algora bounty").slice(0, 200);
+  const reward = extractAlgoraReward(item.reward ?? item.amount ?? item.amount_usd ?? item.reward_usd, `${title} ${item.reward_formatted ?? ""}`);
+  const techStack = inferTechStack(`${title} ${task.repo_name ?? ""} ${item.org ?? ""} ${item.organization ?? ""}`);
+  return {
+    source: "algora",
+    title,
+    url,
+    reward_usd: reward,
+    tech_stack: techStack,
+    raw: {
+      source_shape: "api",
+      status: String(item.status || ""),
+      org: String(item.org || item.organization || ""),
+      reward_formatted: item.reward_formatted ?? null,
+      task: {
+        repo_name: task.repo_name ?? null,
+        number: task.number ?? null,
+        url: task.url ?? null,
+      },
+    },
+  };
+}
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseAlgoraPageBounties(org: string, html: string): Opportunity[] {
+  const text = htmlToText(html);
+  const out: Opportunity[] = [];
+  const seen = new Set<string>();
+  const bountyPattern =
+    /\$\s?([0-9][0-9,]*(?:\.[0-9]+)?)\s+([A-Za-z0-9_.-]+)#([0-9]+)\s+(.+?)(?=\s+\d+\s+(?:days?|weeks?|months?|years?)\s+ago|\s+Image:|\s+\$\s?[0-9]|$)/g;
+  let match: RegExpExecArray | null;
+  while ((match = bountyPattern.exec(text)) !== null) {
+    const reward = Number(match[1].replace(/,/g, ""));
+    const repo = match[2];
+    const issueNumber = match[3];
+    const title = match[4].replace(/\s+/g, " ").trim().slice(0, 200);
+    if (!Number.isFinite(reward) || reward <= 0 || !title) continue;
+    const url = `https://algora.io/${org}/bounties?status=open#${repo}-${issueNumber}`;
+    if (seen.has(url)) continue;
+    seen.add(url);
     out.push({
       source: "algora",
-      title: title || `Algora bounty`,
+      title: `${repo}#${issueNumber} ${title}`,
       url,
       reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
+      tech_stack: inferTechStack(`${org} ${repo} ${title}`),
+      raw: {
+        source_shape: "public_org_page",
+        org,
+        repo,
+        issue_number: Number(issueNumber),
+        source_page: `https://algora.io/${org}/bounties?status=open`,
+      },
     });
   }
   return out;
+}
+
+// --- Source 3: Algora public bounties (best-effort, no key) ---
+// Prefer the documented public API from the bounty task. If Algora serves the
+// interactive HTML shell instead of JSON, fall back to public org bounty pages.
+async function fetchAlgora(): Promise<Opportunity[]> {
+  const out: Opportunity[] = [];
+  const seen = new Set<string>();
+  const add = (opps: Opportunity[]) => {
+    for (const opp of opps) {
+      if (seen.has(opp.url)) continue;
+      seen.add(opp.url);
+      out.push(opp);
+    }
+  };
+
+  const r = await fetchT(ALGORA_API_URL, {
+    headers: { Accept: "application/json" },
+  });
+  if (r.ok) {
+    const contentType = r.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const j = await r.json().catch(() => null);
+      add(parseAlgoraApiItems(j).map(normalizeAlgoraApiBounty).filter((opp): opp is Opportunity => Boolean(opp)));
+    } else {
+      const html = await r.text().catch(() => "");
+      add(parseAlgoraPageBounties("api", html));
+    }
+  }
+
+  if (out.length >= 10) return out.slice(0, 50);
+
+  for (const org of ALGORA_FALLBACK_ORGS) {
+    const pageUrl = `https://algora.io/${org}/bounties?status=open`;
+    const page = await fetchT(pageUrl, { headers: { Accept: "text/html" } }).catch(() => null);
+    if (!page?.ok) continue;
+    const html = await page.text().catch(() => "");
+    add(parseAlgoraPageBounties(org, html));
+    if (out.length >= 50) break;
+  }
+
+  return out.slice(0, 50);
 }
 
 // Queue one real opportunity into runtime_jobs, idempotent on task_id.
@@ -271,6 +420,7 @@ async function queueOpportunity(
       url: opp.url,
       title: opp.title,
       reward_usd: opp.reward_usd,
+      tech_stack: opp.tech_stack,
       raw: opp.raw,
     },
   });
