@@ -26,6 +26,7 @@ type Opportunity = {
   url: string;
   reward_usd: number | null;
   tech_stack: string[];
+  observed_at?: string;
   raw: Record<string, unknown>;
 };
 
@@ -278,14 +279,17 @@ function normalizeAlgoraApiBounty(item: AlgoraApiBounty): Opportunity | null {
   const title = String(item.title || task.title || item.task || item.reward_formatted || "Algora bounty").slice(0, 200);
   const reward = extractAlgoraReward(item.reward ?? item.amount ?? item.amount_usd ?? item.reward_usd, `${title} ${item.reward_formatted ?? ""}`);
   const techStack = inferTechStack(`${title} ${task.repo_name ?? ""} ${item.org ?? ""} ${item.organization ?? ""}`);
+  const observedAt = new Date().toISOString();
   return {
     source: "algora",
     title,
     url,
     reward_usd: reward,
     tech_stack: techStack,
+    observed_at: observedAt,
     raw: {
       source_shape: "api",
+      observed_at: observedAt,
       status: String(item.status || ""),
       org: String(item.org || item.organization || ""),
       reward_formatted: item.reward_formatted ?? null,
@@ -315,6 +319,7 @@ function parseAlgoraPageBounties(org: string, html: string): Opportunity[] {
   const text = htmlToText(html);
   const out: Opportunity[] = [];
   const seen = new Set<string>();
+  const observedAt = new Date().toISOString();
   const bountyPattern =
     /\$\s?([0-9][0-9,]*(?:\.[0-9]+)?)\s+([A-Za-z0-9_.-]+)#([0-9]+)\s+(.+?)(?=\s+\d+\s+(?:days?|weeks?|months?|years?)\s+ago|\s+Image:|\s+\$\s?[0-9]|$)/g;
   let match: RegExpExecArray | null;
@@ -333,8 +338,10 @@ function parseAlgoraPageBounties(org: string, html: string): Opportunity[] {
       url,
       reward_usd: reward,
       tech_stack: inferTechStack(`${org} ${repo} ${title}`),
+      observed_at: observedAt,
       raw: {
         source_shape: "public_org_page",
+        observed_at: observedAt,
         org,
         repo,
         issue_number: Number(issueNumber),
@@ -404,6 +411,7 @@ async function queueOpportunity(
   // Concrete reward => solve it; unknown reward => qualify it first via research.
   const taskKind = opp.reward_usd != null ? "bounty_solving" : "research";
   const priority = rewardPriority(opp.reward_usd);
+  const observedAt = opp.observed_at ?? new Date().toISOString();
 
   const { error } = await sb.from("runtime_jobs").insert({
     task_id: taskId,
@@ -421,6 +429,7 @@ async function queueOpportunity(
       title: opp.title,
       reward_usd: opp.reward_usd,
       tech_stack: opp.tech_stack,
+      observed_at: observedAt,
       raw: opp.raw,
     },
   });

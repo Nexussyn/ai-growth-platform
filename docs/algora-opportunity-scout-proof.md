@@ -57,3 +57,5 @@ $500 SCIBASE.AI#11 User & Project Management
 ```
 
 Rewards are inserted as extracted numeric USD values, or `null` when no value can be parsed.
+
+Freshness note added on 2026-07-13 UTC: Algora opportunities now carry `observed_at` in the queued payload and raw source metadata. This keeps the existing URL-based idempotency key while making stale or inconsistent source-page repeats auditable in `runtime_jobs`.
