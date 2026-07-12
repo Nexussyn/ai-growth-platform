@@ -40,4 +40,20 @@ https://algora.io/arakoodev/bounties?status=open
 $50 EdgeChains#290 BOUNTY: integrate AWS Comprehend as a utility to redact data
 ```
 
+Second proof check on 2026-07-12 UTC: the public `SCIBASE.AI` Algora page alone exposed 11 open bounties, enough for the "at least 10 real Algora bounties" acceptance path if the API keeps serving HTML. The first 10 parser-visible rows were:
+
+```text
+https://algora.io/SCIBASE.AI/bounties?status=open
+$400 SCIBASE.AI#13 AI-Assisted Research Tools (MVP Level)
+$500 SCIBASE.AI#20 Revenue Infrastructure
+$175 SCIBASE.AI#19 Enterprise Tooling
+$1,000 SCIBASE.AI#18 Scientific Bounty System
+$475 SCIBASE.AI#17 Scientific Knowledge Graph Integration
+$1,325 SCIBASE.AI#16 AI-Powered Research Assistant Suite
+$525 SCIBASE.AI#15 Community & User Reputation System
+$375 SCIBASE.AI#14 Scientific/Engineering Data & Code Hosting
+$700 SCIBASE.AI#12 Real-time collaborative research editor & interface
+$500 SCIBASE.AI#11 User & Project Management
+```
+
 Rewards are inserted as extracted numeric USD values, or `null` when no value can be parsed.
