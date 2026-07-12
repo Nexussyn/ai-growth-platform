@@ -16,4 +16,4 @@ GET https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federat
 Base, Polygon, Arbitrum, Optimism
 
 ## Updated
-2026-07-12T23:22:56.662Z
+2026-07-12T23:23:03.382Z
