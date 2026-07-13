@@ -202,7 +202,7 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 // --- Source 3: Algora public bounties (best-effort, no key) ---
 // If the public endpoint is unreachable or its shape changes, ignore cleanly.
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
+  const r = await fetchT("https://algora.io/api/bounties?status=open&limit=50", {
     headers: { Accept: "application/json" },
   });
   if (!r.ok) return [];
@@ -216,6 +216,12 @@ async function fetchAlgora(): Promise<Opportunity[]> {
     const url = String(it.url || it.html_url || it.link || "");
     if (!url || !/^https?:\/\//.test(url)) continue;
     const title = String(it.title || it.task || it.name || "").slice(0, 200);
+    
+    // Algora tech stack parsing
+    const tech_stack = Array.isArray(it.tech_stack)
+      ? (it.tech_stack as string[])
+      : Array.isArray(it.tags) ? (it.tags as string[]) : [];
+
     // Algora amounts are typically minor units (cents) under reward/amount.
     const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
     let reward: number | null = null;
@@ -227,12 +233,17 @@ async function fetchAlgora(): Promise<Opportunity[]> {
     } else {
       reward = extractUsd(title);
     }
+    
     out.push({
       source: "algora",
       title: title || `Algora bounty`,
       url,
       reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
+      raw: { 
+        status: String(it.status || ""), 
+        org: String(it.org || it.organization || ""),
+        tech_stack 
+      },
     });
   }
   return out;
