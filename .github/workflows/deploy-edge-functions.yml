@@ -1,0 +1,57 @@
+name: 🚀 Deploy Edge Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+  workflow_dispatch:
+    inputs:
+      function:
+        description: 'Function slug to deploy (leave empty for all changed functions)'
+        required: false
+        default: ''
+
+jobs:
+  deploy:
+    name: Deploy Supabase Edge Functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy changed functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          PROJECT_REF="kjtirbnxxymeumycrhqv"
+
+          # Si un slug est fourni via workflow_dispatch, déployer uniquement celui-là
+          if [ -n "${{ github.event.inputs.function }}" ]; then
+            echo "▶ Deploying single function: ${{ github.event.inputs.function }}"
+            supabase functions deploy ${{ github.event.inputs.function }} \
+              --project-ref $PROJECT_REF --no-verify-jwt
+            exit 0
+          fi
+
+          # Sinon, détecter les fonctions modifiées dans ce push
+          CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'supabase/functions/' \
+            | grep -oP 'supabase/functions/\K[^/]+' | sort -u || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "No function changes detected — deploying treasury-sweep as fallback"
+            CHANGED="treasury-sweep"
+          fi
+
+          echo "Functions to deploy: $CHANGED"
+          for fn in $CHANGED; do
+            echo "▶ Deploying $fn ..."
+            supabase functions deploy $fn \
+              --project-ref $PROJECT_REF --no-verify-jwt \
+              && echo "✅ $fn deployed" \
+              || echo "❌ $fn failed (non-blocking)"
+          done
