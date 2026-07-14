@@ -1,5 +1,6 @@
 // treasury-sweep v4 — REAL on-chain USDC settlement via CDP + ethers fallback
 // Traite les lignes pending_payout (tx_hash réels) → transfert USDC → owner wallet
+// deployed: 2026-07-14
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { Wallet, JsonRpcProvider, Contract } from "npm:ethers@6.13.4";
@@ -90,10 +91,9 @@ async function cdpTransfer(
     })
   });
   if (!txResp.ok) throw new Error(`CDP transfer: ${await txResp.text()}`);
-  const txData   = await txResp.json();
+  const txData     = await txResp.json();
   const transferId = txData.transfer_id || txData.id;
 
-  // Poll for confirmed hash (30s max)
   let txHash = txData.transaction_hash || "";
   if (!txHash) {
     for (let i = 0; i < 6; i++) {
@@ -144,7 +144,6 @@ Deno.serve(async (req: Request) => {
   const errors:  unknown[] = [];
 
   try {
-    // Récupérer lignes pending_payout avec vrai tx_hash on-chain
     const { data: pending, error: fetchErr } = await admin
       .from("owner_settlement_ledger")
       .select("*")
@@ -162,10 +161,7 @@ Deno.serve(async (req: Request) => {
         const network: "base" | "arbitrum" =
           (row.network || "base").toLowerCase().includes("arb") ? "arbitrum" : "base";
         const amount = parseFloat(row.owner_net_amount);
-        if (amount < 0.01) {
-          errors.push({ id: row.id, reason: "Amount < $0.01" });
-          continue;
-        }
+        if (amount < 0.01) { errors.push({ id: row.id, reason: "Amount < $0.01" }); continue; }
 
         let result;
         if (CDP_API_KEY_NAME && CDP_PRIVATE_KEY && CDP_WALLET_ID) {
@@ -176,7 +172,6 @@ Deno.serve(async (req: Request) => {
           throw new Error("No signing method: set CDP_* secrets or AGENT_SIGNER_KEY");
         }
 
-        // Update ledger row → paid
         await admin.from("owner_settlement_ledger").update({
           status:             "paid",
           payout_tx_hash:     result.txHash,
@@ -186,7 +181,6 @@ Deno.serve(async (req: Request) => {
           payout_method:      result.method
         }).eq("id", row.id);
 
-        // Audit log
         await admin.from("settlement_audit_log").upsert({
           ledger_id:   row.id,
           tx_hash:     result.txHash,
@@ -198,18 +192,8 @@ Deno.serve(async (req: Request) => {
           executed_at: new Date().toISOString()
         }, { onConflict: "ledger_id" });
 
-        const explorerBase =
-          network === "base" ? "https://basescan.org/tx/" : "https://arbiscan.io/tx/";
-
-        results.push({
-          id:       row.id,
-          amount,
-          network,
-          txHash:   result.txHash,
-          method:   result.method,
-          explorer: `${explorerBase}${result.txHash}`,
-          status:   "paid"
-        });
+        const explorerBase = network === "base" ? "https://basescan.org/tx/" : "https://arbiscan.io/tx/";
+        results.push({ id: row.id, amount, network, txHash: result.txHash, method: result.method, explorer: `${explorerBase}${result.txHash}`, status: "paid" });
         console.log(`✅ Settled row ${row.id} → ${result.txHash} (${result.method})`);
 
       } catch (rowErr) {
@@ -217,8 +201,7 @@ Deno.serve(async (req: Request) => {
         errors.push({ id: row.id, error: msg });
         console.error(`❌ Row ${row.id}: ${msg}`);
         await admin.from("owner_settlement_ledger").update({
-          status:        "payout_failed",
-          error_message: msg.slice(0, 500)
+          status: "payout_failed", error_message: msg.slice(0, 500)
         }).eq("id", row.id);
       }
     }
@@ -226,11 +209,5 @@ Deno.serve(async (req: Request) => {
     return json({ status: "error", error: String(e) }, 500);
   }
 
-  return json({
-    status:   "ok",
-    settled:  results.length,
-    failed:   errors.length,
-    results,
-    errors
-  });
+  return json({ status: "ok", settled: results.length, failed: errors.length, results, errors });
 });
