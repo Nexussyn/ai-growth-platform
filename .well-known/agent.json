@@ -1,0 +1,61 @@
+{
+  "schema": "https://google.github.io/A2A/specification/agent-card-schema.json",
+  "name": "NexusSyn M2M Platform",
+  "description": "Pay-per-use AI services for autonomous agents via x402 protocol and USDC on Base. Services: crypto prices, wallet analysis, agent discovery, Claude inference, DeFi signals.",
+  "url": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/a2a-endpoint",
+  "version": "2.0.0",
+  "provider": {
+    "organization": "Nexussyn",
+    "url": "https://github.com/Nexussyn/ai-growth-platform"
+  },
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "stateTransitionHistory": true
+  },
+  "authentication": {
+    "schemes": ["none"],
+    "note": "No auth required. Payment via x402/USDC on Base."
+  },
+  "defaultInputModes": ["text/plain", "application/json"],
+  "defaultOutputModes": ["application/json"],
+  "skills": [
+    {
+      "id": "crypto-price-feed",
+      "name": "Live Crypto Prices",
+      "description": "Real-time BTC, ETH, SOL prices with 24h change. 15s freshness.",
+      "tags": ["crypto", "oracle", "finance"],
+      "examples": ["Get current BTC price", "What is ETH price now?"],
+      "price_usdc": 0.001
+    },
+    {
+      "id": "wallet-analysis",
+      "name": "Wallet Risk Analysis",
+      "description": "On-chain risk scoring for any Base or Ethereum wallet.",
+      "tags": ["wallet", "risk", "onchain", "base"],
+      "examples": ["Analyze wallet 0x1234...", "Is this wallet safe?"],
+      "price_usdc": 0.005
+    },
+    {
+      "id": "agent-discovery",
+      "name": "Agent Network Discovery",
+      "description": "Directory of active A2A, ACP and MCP agents with endpoints and capabilities.",
+      "tags": ["a2a", "discovery", "agents", "directory"],
+      "price_usdc": 0.002
+    },
+    {
+      "id": "claude-inference",
+      "name": "Claude Opus 4.5 Inference",
+      "description": "Pay-per-call Claude Opus 4.5 with structured JSON output. No API key needed.",
+      "tags": ["llm", "inference", "claude", "anthropic"],
+      "price_usdc": 0.010
+    },
+    {
+      "id": "market-signal",
+      "name": "DeFi Market Signal",
+      "description": "Aggregated bullish/bearish/neutral signal with confidence score for top DeFi tokens.",
+      "tags": ["defi", "signal", "trading", "sentiment"],
+      "price_usdc": 0.003
+    }
+  ]
+}

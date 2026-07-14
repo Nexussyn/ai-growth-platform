@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "agent_id": "nexussyn-m2m-platform",
+  "name": "NexusSyn M2M Platform",
+  "description": "Pay-per-use AI services for autonomous agents. x402 + USDC on Base. No registration required.",
+  "version": "2.0.0",
+  "operator": "Nexussyn",
+  "url": "https://kjtirbnxxymeumycrhqv.supabase.co",
+  "protocols": ["x402", "a2a", "mcp", "acp"],
+  "endpoints": {
+    "agent_card": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/well-known-agent",
+    "service_catalog": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/x402-seller?discover=1",
+    "a2a": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/a2a-endpoint",
+    "mcp": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-mcp-server",
+    "openapi": "https://raw.githubusercontent.com/Nexussyn/ai-growth-platform/main/openapi.json"
+  },
+  "payment": {
+    "protocol": "x402",
+    "network": "base",
+    "chain_id": 8453,
+    "token": "USDC",
+    "contract": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "wallet": "0xb438d36b425b504724a1c72aa0941c80cb940995",
+    "model": "pay-per-use"
+  },
+  "services": [
+    { "slug": "crypto-price-feed",  "price_usdc": 0.001, "category": "oracle" },
+    { "slug": "wallet-analysis",    "price_usdc": 0.005, "category": "data" },
+    { "slug": "agent-discovery",    "price_usdc": 0.002, "category": "data" },
+    { "slug": "claude-inference",   "price_usdc": 0.010, "category": "inference" },
+    { "slug": "market-signal",      "price_usdc": 0.003, "category": "oracle" }
+  ],
+  "capabilities": ["oracle", "data", "inference", "agent-coordination"],
+  "languages": ["en", "fr", "zh", "ja", "ko", "ar", "pt", "de"],
+  "trust": {
+    "open_source": true,
+    "github": "https://github.com/Nexussyn/ai-growth-platform",
+    "license": "MIT"
+  }
+}
