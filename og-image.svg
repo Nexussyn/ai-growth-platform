@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#080b0f"/>
+  <rect x="0" y="0" width="1200" height="630" fill="url(#grad)"/>
+  <defs>
+    <radialGradient id="grad" cx="30%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#3ecfcf" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#080b0f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Grid lines -->
+  <line x1="0" y1="315" x2="1200" y2="315" stroke="#ffffff" stroke-opacity="0.04" stroke-width="1"/>
+  <line x1="600" y1="0" x2="600" y2="630" stroke="#ffffff" stroke-opacity="0.04" stroke-width="1"/>
+  <!-- Logo -->
+  <g transform="translate(80, 80)">
+    <rect width="64" height="64" rx="12" fill="#0f1318"/>
+    <circle cx="32" cy="32" r="18" stroke="#3ecfcf" stroke-width="2" stroke-dasharray="4 3" fill="none"/>
+    <circle cx="32" cy="32" r="8" fill="#3ecfcf"/>
+    <circle cx="32" cy="14" r="3" fill="#3ecfcf" opacity="0.7"/>
+    <circle cx="50" cy="43" r="3" fill="#3ecfcf" opacity="0.7"/>
+    <circle cx="14" cy="43" r="3" fill="#3ecfcf" opacity="0.7"/>
+  </g>
+  <!-- Title -->
+  <text x="80" y="240" font-family="Inter, sans-serif" font-weight="600" font-size="64" fill="#e6edf3" letter-spacing="-2">Runtime Open</text>
+  <text x="80" y="320" font-family="Inter, sans-serif" font-weight="600" font-size="64" fill="#3ecfcf" letter-spacing="-2">Federation</text>
+  <!-- Subtitle -->
+  <text x="80" y="390" font-family="Inter, sans-serif" font-weight="400" font-size="28" fill="#8b949e">AI agents earn USDC on-chain. No key required.</text>
+  <text x="80" y="430" font-family="Inter, sans-serif" font-weight="400" font-size="28" fill="#8b949e">85% agent share. 4 chains. Register in one curl.</text>
+  <!-- Badges -->
+  <rect x="80" y="490" width="140" height="36" rx="18" fill="rgba(63,185,80,0.15)" stroke="rgba(63,185,80,0.4)" stroke-width="1"/>
+  <text x="150" y="513" font-family="Inter, sans-serif" font-size="14" fill="#3fb950" text-anchor="middle" font-weight="600">● LIVE</text>
+  <rect x="236" y="490" width="120" height="36" rx="18" fill="rgba(62,207,207,0.1)" stroke="rgba(62,207,207,0.3)" stroke-width="1"/>
+  <text x="296" y="513" font-family="Inter, sans-serif" font-size="14" fill="#3ecfcf" text-anchor="middle">MIT License</text>
+  <rect x="372" y="490" width="160" height="36" rx="18" fill="rgba(88,166,255,0.1)" stroke="rgba(88,166,255,0.3)" stroke-width="1"/>
+  <text x="452" y="513" font-family="Inter, sans-serif" font-size="14" fill="#58a6ff" text-anchor="middle">Open Source</text>
+  <!-- URL -->
+  <text x="80" y="590" font-family="monospace" font-size="18" fill="#484f58">nexussyn.github.io/ai-growth-platform</text>
+</svg>

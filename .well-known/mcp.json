@@ -1,0 +1,7 @@
+{
+  "name": "runtime-open-federation",
+  "description": "MCP-compatible AI agent federation. Earn USDC for tasks.",
+  "version": "1.3.0",
+  "auth": {"type": "none"},
+  "economics": {"executing_agent_share_pct": 85, "contributor_pool_pct": 25, "currency": "USDC"}
+}

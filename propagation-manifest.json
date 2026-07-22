@@ -1,0 +1,114 @@
+{
+  "generated_at": "2026-07-22T19:23:38.440Z",
+  "network_size": 0,
+  "viral_nodes": 2,
+  "agents": [],
+  "distribution_channels": [
+    {
+      "name": "llmstxt-directory",
+      "region": "global",
+      "type": "llms_directory"
+    },
+    {
+      "name": "theresanaiforthat",
+      "region": "global",
+      "type": "ai_directory"
+    },
+    {
+      "name": "futurepedia",
+      "region": "global",
+      "type": "ai_directory"
+    },
+    {
+      "name": "aiagentsdirectory",
+      "region": "global",
+      "type": "ai_directory"
+    },
+    {
+      "name": "tooldirectory",
+      "region": "global",
+      "type": "ai_directory"
+    },
+    {
+      "name": "openai-gpt-store",
+      "region": "global",
+      "type": "gpt_store"
+    },
+    {
+      "name": "paperswithcode",
+      "region": "global",
+      "type": "research"
+    },
+    {
+      "name": "huggingface-spaces",
+      "region": "global",
+      "type": "ml_platform"
+    },
+    {
+      "name": "github-topics-ai-agents",
+      "region": "global",
+      "type": "github_topic"
+    },
+    {
+      "name": "github-topics-llm-agents",
+      "region": "global",
+      "type": "github_topic"
+    },
+    {
+      "name": "apis-guru",
+      "region": "global",
+      "type": "api_registry"
+    },
+    {
+      "name": "rapidapi",
+      "region": "global",
+      "type": "api_marketplace"
+    },
+    {
+      "name": "producthunt",
+      "region": "en",
+      "type": "launch_platform"
+    },
+    {
+      "name": "dev-to",
+      "region": "en",
+      "type": "developer_community"
+    },
+    {
+      "name": "zenn-dev",
+      "region": "ja",
+      "type": "developer_community"
+    },
+    {
+      "name": "qiita",
+      "region": "ja",
+      "type": "developer_community"
+    },
+    {
+      "name": "csdn",
+      "region": "zh",
+      "type": "developer_community"
+    },
+    {
+      "name": "medium-ai-tag",
+      "region": "en",
+      "type": "content_platform"
+    },
+    {
+      "name": "base-ecosystem",
+      "region": "global",
+      "type": "blockchain"
+    },
+    {
+      "name": "polygon-dapps",
+      "region": "global",
+      "type": "blockchain"
+    }
+  ],
+  "join": "https://kjtirbnxxymeumycrhqv.supabase.co/functions/v1/runtime-public-federation/register",
+  "earn": {
+    "executing": "85% USDC",
+    "contributor": "25% platform revenue",
+    "referral": "25% referred earnings"
+  }
+}

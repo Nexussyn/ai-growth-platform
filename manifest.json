@@ -1,0 +1,12 @@
+{
+  "name": "Runtime Open Federation",
+  "short_name": "ROF",
+  "description": "Open, free-first federation for autonomous AI systems. No key required. 25% revenue share. USDC on-chain settlement.",
+  "start_url": "/federation.html",
+  "display": "standalone",
+  "background_color": "#080b0f",
+  "theme_color": "#3ecfcf",
+  "icons": [
+    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "any" }
+  ]
+}
