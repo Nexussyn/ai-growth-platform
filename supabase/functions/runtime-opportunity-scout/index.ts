@@ -200,42 +200,106 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 }
 
 // --- Source 3: Algora public bounties (best-effort, no key) ---
-// If the public endpoint is unreachable or its shape changes, ignore cleanly.
-async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
-  });
-  if (!r.ok) return [];
-  const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
-  const out: Opportunity[] = [];
-  for (const it of items) {
-    const url = String(it.url || it.html_url || it.link || "");
-    if (!url || !/^https?:\/\//.test(url)) continue;
-    const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
-    const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
-    let reward: number | null = null;
-    if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
-      const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
-      if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
-    } else if (typeof it.amount_usd === "number") {
-      reward = it.amount_usd as number;
-    } else {
-      reward = extractUsd(title);
-    }
-    out.push({
-      source: "algora",
-      title: title || `Algora bounty`,
-      url,
-      reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
-    });
+// Probes multiple documented Algora endpoints and only parses JSON payloads.
+// A non-JSON response (e.g. an HTML shell after a platform pivot) is treated as
+// "no bounties" and reported in the source report so the failure is visible,
+// never mistaken for a successful empty fetch.
+const ALGORA_ENDPOINTS = [
+  "https://algora.io/api/bounties?status=open&limit=50",
+  "https://console.algora.io/api/bounties?status=open&limit=30",
+];
+
+// Known tech-stack keywords to look for in bounty text, plus the standard
+// GitHub label that Algora bounties carry (lang/typescript etc. via labels).
+const TECH_KEYWORDS = [
+  "typescript", "javascript", "python", "rust", "go", "golang", "solidity",
+  "zig", "c++", "c#", "java", "kotlin", "swift", "ruby", "php", "elixir",
+  "dart", "sql", "react", "next.js", "vue", "svelte", "node", "deno",
+  "docker", "kubernetes", "k8s", "terraform", "ethereum", "solana", "near",
+  "bitcoin", "react-native", "flutter", "tailwind", "graphql", "grpc",
+];
+
+// Extract the tech stack mentioned in a bounty item: explicit tags/labels
+// first, then keyword scan over title + description. Always a real, non-empty
+// array — an empty array means "no tech stack was actually present".
+function extractTechStack(it: Record<string, unknown>, text: string): string[] {
+  const stack = new Set<string>();
+  const labels = Array.isArray(it.labels) ? (it.labels as Array<unknown>).map(String) : [];
+  const tags = Array.isArray(it.tags) ? (it.tags as Array<unknown>).map(String) : [];
+  const tech = Array.isArray(it.tech) ? (it.tech as Array<unknown>).map(String) : [];
+  for (const t of [...labels, ...tags, ...tech]) {
+    const s = String(t).trim();
+    if (s) stack.add(s.toLowerCase());
   }
-  return out;
+  if (typeof it.lang === "string" && it.lang) stack.add(it.lang.toLowerCase());
+  const haystack = text.toLowerCase();
+  for (const kw of TECH_KEYWORDS) if (haystack.includes(kw)) stack.add(kw);
+  return Array.from(stack).sort().slice(0, 12);
+}
+
+async function fetchAlgora(): Promise<Opportunity[]> {
+  const out: Opportunity[] = [];
+  let lastError = "";
+  for (const endpoint of ALGORA_ENDPOINTS) {
+    try {
+      const r = await fetchT(endpoint, { headers: { Accept: "application/json" } });
+      if (!r.ok) {
+        lastError = `HTTP ${r.status} from ${endpoint}`;
+        continue;
+      }
+      const contentType = String(r.headers.get("content-type") || "");
+      if (!contentType.includes("json")) {
+        lastError = `non-JSON response (${contentType || "missing content-type"}) from ${endpoint}`;
+        continue;
+      }
+      const j = await r.json().catch(() => null);
+      if (j == null) {
+        lastError = `unparseable JSON from ${endpoint}`;
+        continue;
+      }
+      // Tolerate both {items:[...]} and bare-array shapes.
+      const items: Array<Record<string, unknown>> = Array.isArray(j)
+        ? j
+        : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
+      for (const it of items) {
+        const url = String(it.url || it.html_url || it.link || "");
+        if (!url || !/^https?:\/\//.test(url)) continue;
+        const title = String(it.title || it.task || it.name || "").slice(0, 200);
+        const desc = String(it.description || it.body || "").slice(0, 500);
+        // Algora amounts are typically minor units (cents) under reward/amount.
+        const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
+        let reward: number | null = null;
+        if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
+          const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
+          if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
+        } else if (typeof it.amount_usd === "number") {
+          reward = it.amount_usd as number;
+        } else {
+          reward = extractUsd(`${title} ${desc}`);
+        }
+        out.push({
+          source: "algora",
+          title: title || `Algora bounty`,
+          url,
+          reward_usd: reward,
+          raw: {
+            status: String(it.status || ""),
+            org: String(it.org || it.organization || ""),
+            tech_stack: extractTechStack(it, `${title} ${desc}`),
+            endpoint,
+          },
+        });
+      }
+      if (out.length > 0) return out;
+      lastError = `empty items array from ${endpoint}`;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
+  }
+  // No endpoint produced data: surface the last failure instead of silently
+  // pretending there were zero bounties. The caller records it as a source
+  // error in the report; nothing is queued into runtime_jobs.
+  throw new Error(`algora: ${lastError || "no data"}`);
 }
 
 // Queue one real opportunity into runtime_jobs, idempotent on task_id.
