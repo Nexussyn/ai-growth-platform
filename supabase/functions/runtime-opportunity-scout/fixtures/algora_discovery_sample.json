@@ -1,0 +1,126 @@
+{
+  "note": "Sample raw GitHub Search response used as Algora discovery fallback when algora.io/api/bounties returns HTML.",
+  "endpoint": "https://api.github.com/search/issues",
+  "query": "algora.io is:issue is:open",
+  "total_count": 77,
+  "items": [
+    {
+      "title": "Donation/funding for german language",
+      "html_url": "https://github.com/hexgrad/kokoro/issues/290",
+      "body": "Hi there, \n\n*tl;dr: click on opire link to add funding/donation for german language.*\n\n### I) Motivation for german language in kokoro\n#### I.1) Kokoro is best quality openweight TTS\nSee, e.g. the leaderboards:\n- https://artificialanalysis.ai/text-to-speech/leaderboard?open-weights=true\n- https://huggingface.co/spaces/TTS-AGI/TTS-Arena\n- https://huggingface.co/spaces/TTS-AGI/TTS-Arena-V2\n\n#### I.2",
+      "labels": []
+    },
+    {
+      "title": "\ud83d\udd0d [Agent Task] Add Algora bounty discovery to runtime-opportunity-scout",
+      "html_url": "https://github.com/Nexussyn/ai-growth-platform/issues/4",
+      "body": "## Context\n\nThe `runtime-opportunity-scout` currently queries Gitcoin Grants and GitHub labeled issues. [Algora](https://algora.io) is a major bounty platform with a public API that lists real paid open-source tasks.\n\n## Task\n\n1. Add Algora API integration to `runtime-opportunity-scout`\n2. Parse bounty data: title, URL, reward_usd, tech stack\n3. Insert into `runtime_jobs` with idempotent SHA-1 tas",
+      "labels": [
+        "bounty",
+        "agent-task"
+      ]
+    },
+    {
+      "title": "Allow 2-way-sync",
+      "html_url": "https://github.com/nextcloud/android/issues/19",
+      "body": "When 'syncronizing' a folder in the nextCloud app, actually changes from the remote server become propagated on the mobile device. However changes on the mobile device aren't uploaded back to the remote server.\n\nHow the nextCloud app should behave:\n- files added to a synchronized folder should be scanned/recognized\n- changes to files (create, update, delete) of a synchronized folder should be prop",
+      "labels": [
+        "enhancement",
+        "feature: sync"
+      ]
+    },
+    {
+      "title": "\ud83d\udd10 AWS S3 Security Remediation & Civil ID Upload Fix \u2014 IAM Key Rotation, Bucket Hardening & Backend Patches",
+      "html_url": "https://github.com/BAWES-Universe/studenthub/issues/55",
+      "body": "# AWS S3 Security Remediation & Civil ID Upload Fix\n\n> **\u26a0\ufe0f Sensitive handling note**\n> This issue intentionally uses IAM user names and key suffixes only. Do **not** paste full access keys, secret keys, bearer tokens, or private candidate data into comments on this issue.\n\n---\n\n## Background\n\nA destructive S3 lifecycle rule named `PressureDelete3Days` was discovered enabled on the **permanent** `",
+      "labels": [
+        "bug",
+        "help wanted",
+        "security"
+      ]
+    },
+    {
+      "title": "Low Handing Fruit Automation",
+      "html_url": "https://github.com/SecureBananaLabs/bug-bounty/issues/743",
+      "body": "Automate Low Hanging fruit bug detection and issue creation recursively.\n\nThis issue is an issue focused on creating more issues:\n1. Find a feature/bug to work on from this repository\n2. Create a GitHub issue on the repository to start working on it -- Pull requests without issues will not be considered.\n3. Use the following string in the issue that you created: \"This issue is limited only to the ",
+      "labels": [
+        "bug",
+        "documentation",
+        "good first issue",
+        "help wanted",
+        "bug bounty",
+        "AI agent friendly",
+        "bounty",
+        "\ud83d\udc8e Bounty",
+        "$700"
+      ]
+    },
+    {
+      "title": "AI Transcription Tool",
+      "html_url": "https://github.com/daytona/content/issues/13",
+      "body": "### Content Type\n\nGuide\n\n### Article Description\n\nContribute to the repo to add more supported APIs: https://github.com/nkkko/sapat\r\nOpenAI, groq, what else?\r\nWrite a long-form guide based on the repo and readme.\r\n\n\n### Target Audience\n\nAI engineer\n\n### References/Resources\n\nhttps://github.com/nkkko/sapat\n\n### Examples\n\nThis is a nice example, but it needs to be longer, explain more each step, esp",
+      "labels": [
+        "\ud83d\udc8e Bounty"
+      ]
+    },
+    {
+      "title": "Most HTML-scraping connectors bypass stealth entirely \u2014 standardise on ox-browser POST /fetch",
+      "html_url": "https://github.com/anatolykoptev/go-job/issues/348",
+      "body": "Most job connectors scrape HTML from consumer sites with a bare `net/http` client \u2014 Go's TLS fingerprint, a Go User-Agent, and a datacenter IP. Only five of them use any anti-bot transport at all.\n\nMeasured on `main`, counting transport references per file in `internal/engine/jobs/`:\n\n| connector | transport |\n|---|---|\n| `craigslist.go` | `engine.Cfg.BrowserClient` (stealth) |\n| `indeed.go` | `en",
+      "labels": [
+        "followup"
+      ]
+    },
+    {
+      "title": "Benchmark APIs with p50, p95, p99 latency, RPS, error rate and TTFB",
+      "html_url": "https://github.com/SecureBananaLabs/bug-bounty/issues/30",
+      "body": "**Goals**\n- Establish a baseline benchmark suite for all platform API endpoints\n- Measure latency (p50, p95, p99), throughput (req/s), and error rate under load\n- Identify bottlenecks before they surface in production\n- Produce a reproducible report that can be re-run on future builds for regression tracking\n\n**Acceptance Criteria**\n\n**Scope**\n- [ ] All endpoints under `/api/` are included in the ",
+      "labels": [
+        "good first issue",
+        "help wanted",
+        "bug bounty",
+        "AI agent friendly",
+        "bounty",
+        "\ud83d\udc8e Bounty",
+        "$750"
+      ]
+    },
+    {
+      "title": "[BOUNTY] WearOS Support [$1340]",
+      "html_url": "https://github.com/microg/GmsCore/issues/2843",
+      "body": "[**BOUNTY CURRENTLY AT $450**](https://www.bountyhub.dev/en/bounty/view/27a47575-ef9f-49d3-9685-c056d6825f9d) and already the biggest listing on BountyHub by far.\n\n**Is your feature request related to a problem? Please describe.**\n\nWearOS devices do not work with MicroG\n\n**Describe the solution you'd like**\n\nMicroG framework needed to pair modern, current-gen WearOS devices and get basic functiona",
+      "labels": [
+        "enhancement",
+        "bounty"
+      ]
+    },
+    {
+      "title": "GitHub Based Marketing",
+      "html_url": "https://github.com/ubiquity/business-development/issues/90",
+      "body": "I presume that they do regular searches on GitHub for terms like \"bounty\" to find projects doing bounties. We can do the same for growth!\r\n\r\nhttps://www.github.com/ubiquity/recruiting/issues/11#issuecomment-2395535592",
+      "labels": [
+        "Time: <1 Day",
+        "Priority: 3 (High)",
+        "Price: 200 USD"
+      ]
+    },
+    {
+      "title": "Add SHA-3 (Keccak) Hashing Support",
+      "html_url": "https://github.com/amithmandassociates-oss/hash-report-tool/issues/2",
+      "body": "**Is your feature request related to a problem? Please describe.**\nCurrently, the tool supports MD5, SHA-1, and SHA-256. While these are industry standards, modern forensic requirements are shifting toward **SHA-3 (FIPS 202)** for increased security and collision resistance.\n\n**Describe the solution you'd like**\nI would like to add a new column to the \"Bulk Evidence Hash Reporter\" table for **SHA-",
+      "labels": []
+    },
+    {
+      "title": "Technical Poem Generation and Content Creation",
+      "html_url": "https://github.com/SecureBananaLabs/bug-bounty/issues/76",
+      "body": "**Goal**\nAdd a poem to the project \u2014 theme, form, and tone are entirely your choice.\n\n**Acceptance Criteria**\n- [ ] Poem is original and written for this project specifically\n- [ ] Minimum 3 stanzas\n- [ ] Submitted as `POEM.md` in the project root\n- [ ] PR description includes a one-line note on the creative decision you made (why this theme, form, or tone)\n\nImportant: Star the repository https://",
+      "labels": [
+        "good first issue",
+        "bug bounty",
+        "AI agent friendly",
+        "bounty",
+        "\ud83d\udc8e Bounty",
+        "$430"
+      ]
+    }
+  ]
+}
