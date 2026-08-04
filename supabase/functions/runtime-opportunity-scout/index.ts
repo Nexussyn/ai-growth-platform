@@ -199,42 +199,132 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
   return out;
 }
 
-// --- Source 3: Algora public bounties (best-effort, no key) ---
-// If the public endpoint is unreachable or its shape changes, ignore cleanly.
+// --- Source 3: Algora bounties ---
+// Primary: public Algora HTTP endpoints (shape changes often → best-effort JSON).
+// Fallback: GitHub Search for open issues that reference algora.io bounty rails.
+// reward_usd is only set when parseable from structured fields or text — never invented.
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
-  });
-  if (!r.ok) return [];
-  const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
   const out: Opportunity[] = [];
-  for (const it of items) {
-    const url = String(it.url || it.html_url || it.link || "");
-    if (!url || !/^https?:\/\//.test(url)) continue;
-    const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
-    const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
-    let reward: number | null = null;
-    if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
-      const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
-      if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
-    } else if (typeof it.amount_usd === "number") {
-      reward = it.amount_usd as number;
-    } else {
-      reward = extractUsd(title);
+  const seen = new Set<string>();
+
+  const push = (opp: Opportunity) => {
+    if (!opp.url || !/^https?:\/\//.test(opp.url) || seen.has(opp.url)) return;
+    seen.add(opp.url);
+    out.push(opp);
+  };
+
+  // 1) Try known public endpoints. Many currently return HTML shells; ignore non-JSON.
+  const endpoints = [
+    "https://algora.io/api/bounties?status=open&limit=50",
+    "https://console.algora.io/api/bounties?status=open&limit=50",
+  ];
+  for (const ep of endpoints) {
+    try {
+      const r = await fetchT(ep, { headers: { Accept: "application/json" } });
+      if (!r.ok) continue;
+      const ct = (r.headers.get("content-type") || "").toLowerCase();
+      const text = await r.text();
+      if (ct.includes("text/html") || text.trimStart().startsWith("<!")) continue;
+      const j = JSON.parse(text);
+      const items: Array<Record<string, unknown>> = Array.isArray(j)
+        ? j
+        : (j?.items as Array<Record<string, unknown>>) ||
+          (j?.bounties as Array<Record<string, unknown>>) ||
+          (j?.data as Array<Record<string, unknown>>) ||
+          [];
+      for (const it of items) {
+        const url = String(it.url || it.html_url || it.link || it.issue_url || "");
+        const title = String(it.title || it.task || it.name || "").slice(0, 200);
+        const rewardObj =
+          (it.reward as Record<string, unknown> | null) ||
+          (it.amount as Record<string, unknown> | null) ||
+          null;
+        let reward: number | null = null;
+        if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
+          const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
+          if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
+        } else if (typeof it.amount_usd === "number") {
+          reward = it.amount_usd as number;
+        } else if (typeof it.reward_usd === "number") {
+          reward = it.reward_usd as number;
+        } else {
+          reward = extractUsd(title) ?? extractUsd(JSON.stringify(it).slice(0, 500));
+        }
+        if (!url) continue;
+        push({
+          source: "algora",
+          title: title || "Algora bounty",
+          url,
+          reward_usd: reward,
+          raw: {
+            via: ep,
+            status: String(it.status || ""),
+            org: String(it.org || it.organization || it.owner || ""),
+            tech: it.tech || it.tech_stack || it.languages || null,
+          },
+        });
+      }
+    } catch {
+      // endpoint soft-fail
     }
-    out.push({
-      source: "algora",
-      title: title || `Algora bounty`,
-      url,
-      reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
-    });
   }
+
+  // 2) Fallback: GitHub Search — open issues mentioning Algora bounty rails.
+  // This yields real paid OSS tasks that use Algora even when Algora's JSON API is down.
+  if (out.length < 10) {
+    const ghToken = Deno.env.get("GITHUB_TOKEN") || Deno.env.get("GH_TOKEN") || "";
+    const queries = [
+      "algora.io/bounty is:issue is:open",
+      "algora.io is:issue is:open label:bounty",
+      "\"algora.io\" is:issue is:open \"$\"",
+    ];
+    for (const q of queries) {
+      try {
+        const url =
+          `https://api.github.com/search/issues?q=${encodeURIComponent(q)}&sort=updated&order=desc&per_page=30`;
+        const headers: Record<string, string> = {
+          Accept: "application/vnd.github+json",
+        };
+        if (ghToken) headers.Authorization = `Bearer ${ghToken}`;
+        const r = await fetchT(url, { headers });
+        if (!r.ok) continue;
+        const j = await r.json().catch(() => null);
+        const items: Array<Record<string, unknown>> = (j?.items as Array<Record<string, unknown>>) || [];
+        for (const it of items) {
+          const html = String(it.html_url || "");
+          const title = String(it.title || "").slice(0, 200);
+          const body = String(it.body || "").slice(0, 2000);
+          // Prefer canonical Algora URL inside body when present; else GitHub issue URL.
+          const m = body.match(/https:\/\/algora\.io\/[^\s)"']+/);
+          const bountyUrl = (m && m[0]) || html;
+          if (!bountyUrl) continue;
+          const reward = extractUsd(title) ?? extractUsd(body);
+          const repoUrl = String(it.repository_url || "");
+          const repo = repoUrl.replace("https://api.github.com/repos/", "");
+          push({
+            source: "algora",
+            title: title || "Algora-linked bounty",
+            url: bountyUrl,
+            reward_usd: reward,
+            raw: {
+              via: "github_search",
+              query: q,
+              github_issue: html,
+              repo,
+              number: Number(it.number ?? 0),
+              labels: Array.isArray(it.labels)
+                ? (it.labels as Array<Record<string, unknown>>).map((l) => String(l.name || "")).filter(Boolean)
+                : [],
+            },
+          });
+        }
+      } catch {
+        // query soft-fail
+      }
+      if (out.length >= 50) break;
+    }
+  }
+
   return out;
 }
 
