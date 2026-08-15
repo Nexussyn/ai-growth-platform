@@ -1,0 +1,38 @@
+name: Quality Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies (Supabase functions)
+        working-directory: supabase/functions
+        run: |
+          if [ -f package.json ]; then npm install --no-audit --no-fund; fi
+
+      - name: Type-check (if configured)
+        working-directory: supabase/functions
+        run: |
+          if [ -f tsconfig.json ]; then npx tsc --noEmit; fi
+
+      - name: Lint (if configured)
+        working-directory: supabase/functions
+        run: |
+          if [ -f package.json ] && grep -q '"lint"' package.json; then npm run lint; fi
+
+      - name: Test (if configured)
+        working-directory: supabase/functions
+        run: |
+          if [ -f package.json ] && grep -q '"test"' package.json; then npm test -- --runInBand; fi
