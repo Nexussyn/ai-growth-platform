@@ -1,0 +1,112 @@
+[
+  {
+    "id": "bounty_alg_001",
+    "title": "Add Algora bounty discovery to runtime-opportunity-scout",
+    "url": "https://github.com/Nexussyn/ai-growth-platform/issues/4",
+    "reward_formatted": "$3",
+    "reward_amount": 3.0,
+    "currency": "USD",
+    "tags": ["Python", "AI/LLM", "Automation"],
+    "status": "open",
+    "created_at": "2026-08-15T12:00:00Z"
+  },
+  {
+    "id": "bounty_alg_002",
+    "title": "Implement streaming AST parser for TypeScript macros",
+    "url": "https://github.com/ast-tools/macro-core/issues/102",
+    "reward_formatted": "$250",
+    "reward_amount": 250.0,
+    "currency": "USD",
+    "tags": ["TypeScript", "Compiler"],
+    "status": "open",
+    "created_at": "2026-08-16T14:30:00Z"
+  },
+  {
+    "id": "bounty_alg_003",
+    "title": "Refactor zero-copy memory ring buffer in Rust",
+    "url": "https://github.com/rust-perf/ringbuffer-rs/issues/45",
+    "reward_formatted": "$500",
+    "reward_amount": 500.0,
+    "currency": "USDC",
+    "tags": ["Rust", "Systems"],
+    "status": "open",
+    "created_at": "2026-08-17T09:15:00Z"
+  },
+  {
+    "id": "bounty_alg_004",
+    "title": "Fix memory leak in WebSocket connection pool",
+    "url": "https://github.com/fast-ws/engine/issues/88",
+    "reward_formatted": "$100",
+    "reward_amount": 100.0,
+    "currency": "USD",
+    "tags": ["Go", "Networking"],
+    "status": "open",
+    "created_at": "2026-08-17T18:00:00Z"
+  },
+  {
+    "id": "bounty_alg_005",
+    "title": "Build n8n webhook connector for decentralized notifications",
+    "url": "https://github.com/n8n-nodes/web3-notify/issues/12",
+    "reward_formatted": "$150",
+    "reward_amount": 150.0,
+    "currency": "USDC",
+    "tags": ["n8n", "TypeScript"],
+    "status": "open",
+    "created_at": "2026-08-18T10:00:00Z"
+  },
+  {
+    "id": "bounty_alg_006",
+    "title": "Improve smart contract gas optimization for batch minting",
+    "url": "https://github.com/erc-vault/contracts/issues/56",
+    "reward_formatted": "$350",
+    "reward_amount": 350.0,
+    "currency": "USDC",
+    "tags": ["Solidity", "EVM"],
+    "status": "open",
+    "created_at": "2026-08-18T11:20:00Z"
+  },
+  {
+    "id": "bounty_alg_007",
+    "title": "Add Claude Code CLI review agent hook",
+    "url": "https://github.com/claude-tools/agent-kit/issues/23",
+    "reward_formatted": "$200",
+    "reward_amount": 200.0,
+    "currency": "USD",
+    "tags": ["Python", "AI/LLM"],
+    "status": "open",
+    "created_at": "2026-08-18T15:45:00Z"
+  },
+  {
+    "id": "bounty_alg_008",
+    "title": "Fix race condition in SQLite concurrent writes",
+    "url": "https://github.com/lite-db/driver/issues/71",
+    "reward_formatted": "$120",
+    "reward_amount": 120.0,
+    "currency": "USD",
+    "tags": ["C", "Python"],
+    "status": "open",
+    "created_at": "2026-08-18T20:10:00Z"
+  },
+  {
+    "id": "bounty_alg_009",
+    "title": "Support HTTP/3 QUIC protocol in proxy middleware",
+    "url": "https://github.com/mesh-proxy/gateway/issues/33",
+    "reward_formatted": "$400",
+    "reward_amount": 400.0,
+    "currency": "USD",
+    "tags": ["Rust", "Networking"],
+    "status": "open",
+    "created_at": "2026-08-19T01:00:00Z"
+  },
+  {
+    "id": "bounty_alg_010",
+    "title": "Automate changelog generation from conventional commits",
+    "url": "https://github.com/dev-ops/git-tools/issues/19",
+    "reward_formatted": "$50",
+    "reward_amount": 50.0,
+    "currency": "USD",
+    "tags": ["Bash", "Python"],
+    "status": "open",
+    "created_at": "2026-08-19T02:30:00Z"
+  }
+]
