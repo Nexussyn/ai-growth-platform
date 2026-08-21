@@ -199,40 +199,54 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
   return out;
 }
 
-// --- Source 3: Algora public bounties (best-effort, no key) ---
-// If the public endpoint is unreachable or its shape changes, ignore cleanly.
+// --- Source 3: Algora public bounties via GitHub Search ---
+// Scrapes GitHub for issues explicitly mentioning algora.io
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
-  });
+  const q = `"algora.io" is:issue is:open`;
+  const url = `https://api.github.com/search/issues?q=${encodeURIComponent(q)}&sort=updated&order=desc&per_page=30`;
+  let r: Response;
+  try {
+    r = await fetchT(url, { headers: { Accept: "application/vnd.github+json" } });
+  } catch {
+    return [];
+  }
   if (!r.ok) return [];
   const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
+  const items: Array<Record<string, unknown>> = (j?.items as Array<Record<string, unknown>>) || [];
   const out: Opportunity[] = [];
+  const seen = new Set<string>();
+  
   for (const it of items) {
-    const url = String(it.url || it.html_url || it.link || "");
-    if (!url || !/^https?:\/\//.test(url)) continue;
-    const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
-    const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
-    let reward: number | null = null;
-    if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
-      const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
-      if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
-    } else if (typeof it.amount_usd === "number") {
-      reward = it.amount_usd as number;
-    } else {
-      reward = extractUsd(title);
-    }
+    const html = String(it.html_url || "");
+    if (!html || seen.has(html)) continue;
+    seen.add(html);
+    
+    const title = String(it.title || "").slice(0, 200);
+    const body = String(it.body || "").slice(0, 1000);
+    const repoUrl = String(it.repository_url || "");
+    const repo = repoUrl.replace("https://api.github.com/repos/", "");
+    
+    // Attempt to extract reward from title or body
+    const reward = extractUsd(title) ?? extractUsd(body);
+    
+    const labels = Array.isArray(it.labels)
+      ? (it.labels as Array<Record<string, unknown>>).map((l) => String(l.name || "")).filter(Boolean)
+      : [];
+      
     out.push({
       source: "algora",
       title: title || `Algora bounty`,
-      url,
+      url: html,
       reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
+      raw: {
+        repo,
+        number: Number(it.number ?? 0),
+        state: String(it.state || ""),
+        labels,
+        comments: Number(it.comments ?? 0),
+        updated_at: String(it.updated_at || ""),
+        query: q,
+      },
     });
   }
   return out;
