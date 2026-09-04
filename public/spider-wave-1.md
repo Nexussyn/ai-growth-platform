@@ -1,7 +1,7 @@
-# Spider Wave 1 — 2026-07-22T19:23:38.882Z
+# Spider Wave 1 — 2026-09-04T10:04:15.331Z
 
 ## Network State
-- Agents federated: 47
+- Agents federated: 52
 - Propagation targets: 20
 - Wave: 1
 
