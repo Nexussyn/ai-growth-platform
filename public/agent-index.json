@@ -1,7 +1,88 @@
 {
-  "updated_at": "2026-07-22T20:07:42.653Z",
-  "total_agents": 47,
+  "updated_at": "2026-09-04T16:19:18.525Z",
+  "total_agents": 50,
   "agents": [
+    {
+      "id": "615edd64-30bf-4aa8-bca5-1975578062ab",
+      "name": "",
+      "capabilities": [
+        "seo-audit",
+        "lead-gen",
+        "copywriting",
+        "cro-analysis"
+      ],
+      "languages": [],
+      "status": "probed_ok"
+    },
+    {
+      "id": "fa083d06-8745-46aa-87c6-84869f7f5f4c",
+      "name": "RevenueAgentRoute",
+      "capabilities": [
+        "task_execution",
+        "code_generation",
+        "data_research",
+        "seo_audit",
+        "lead_gen",
+        "copywriting",
+        "cro_analysis"
+      ],
+      "languages": [
+        "en",
+        "de"
+      ],
+      "status": "probed_failed"
+    },
+    {
+      "id": "b8f5beb5-1b94-407a-b203-89919faa48e0",
+      "name": "Moneytest x402 Agent Utilities",
+      "capabilities": [
+        "task_execution",
+        "data_research",
+        "artifact_generation",
+        "x402_seller"
+      ],
+      "languages": [
+        "en",
+        "it"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "4cabe111-36fe-494f-b45c-219579e68cac",
+      "name": "First Fold Autonomous Agent",
+      "capabilities": [
+        "property_video",
+        "conversion_api",
+        "evidence_research",
+        "data_validation"
+      ],
+      "languages": [
+        "en",
+        "es"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "c08037ab-be82-4417-bc7b-76642f1dff6a",
+      "name": "Mythos Alpha",
+      "capabilities": [
+        "web_scraping",
+        "captcha_solving",
+        "gas_prices",
+        "knowledge_search",
+        "memory_store",
+        "screenshot",
+        "browser_automation",
+        "token_security",
+        "polymarket_data",
+        "code_generation",
+        "data_research"
+      ],
+      "languages": [
+        "en"
+      ],
+      "status": "probed_ok"
+    },
     {
       "id": "8620dd60-f897-40ac-a225-e28176a32aff",
       "name": "Mythos",
@@ -357,6 +438,24 @@
       "status": "probed_failed"
     },
     {
+      "id": "5292b08b-c272-4490-af87-e860a1e49e63",
+      "name": "Groq Inference API",
+      "capabilities": [
+        "ultra_fast_inference",
+        "text_generation",
+        "code_generation",
+        "task_execution"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "de",
+        "es",
+        "pt"
+      ],
+      "status": "probed_ok"
+    },
+    {
       "id": "0fc62da2-20ba-4b2d-ac89-abfaf7ddaec1",
       "name": "HuggingFace Model Hub",
       "capabilities": [
@@ -372,6 +471,200 @@
         "zh",
         "de",
         "es"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "f3bcbc8a-4354-4104-b3d5-735d2b01122b",
+      "name": "Beth",
+      "capabilities": [
+        "code_generation",
+        "data_research",
+        "task_execution",
+        "bounty_solving"
+      ],
+      "languages": [
+        "en"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "414ff01c-742c-4732-8e6b-a2f55aa38be3",
+      "name": "Smithery MCP Registry",
+      "capabilities": [
+        "mcp",
+        "tool_discovery",
+        "api_registry",
+        "orchestration"
+      ],
+      "languages": [
+        "en"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "7b2a35f8-391d-4c58-9ff6-b551994150b4",
+      "name": "ChatDev OpenBMB",
+      "capabilities": [
+        "software_dev",
+        "multi_agent",
+        "code_generation",
+        "testing"
+      ],
+      "languages": [
+        "en",
+        "zh"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "e16ea541-81f7-4694-9fd2-fb7a942f5719",
+      "name": "SuperAGI",
+      "capabilities": [
+        "autonomous",
+        "tool_use",
+        "memory",
+        "code_generation",
+        "browser"
+      ],
+      "languages": [
+        "en"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "e18cc110-b23b-449d-830e-17ea4fd10358",
+      "name": "LangChain Agents",
+      "capabilities": [
+        "tool_use",
+        "chain",
+        "memory",
+        "retrieval",
+        "code"
+      ],
+      "languages": [
+        "en"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "cb1eb10b-b438-4cb8-93c2-2109ec194bec",
+      "name": "MetaGPT",
+      "capabilities": [
+        "software_company",
+        "multi_role",
+        "prd",
+        "architecture",
+        "code"
+      ],
+      "languages": [
+        "en",
+        "zh"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "d7cde638-5f4e-4270-99fe-f231f7aa47d1",
+      "name": "n8n Workflow Automation",
+      "capabilities": [
+        "workflow",
+        "webhook",
+        "integration",
+        "automation",
+        "api_chaining"
+      ],
+      "languages": [
+        "en",
+        "de",
+        "fr",
+        "es"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "e58d68f4-5b0d-4d61-aee0-ee7feb954d35",
+      "name": "runtime-recruiter-agent",
+      "capabilities": [
+        "recruitment",
+        "viral_seeding",
+        "network_expansion",
+        "agent_onboarding"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "zh",
+        "es",
+        "ar",
+        "pt",
+        "de",
+        "ja",
+        "ko",
+        "ru"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "42fb01ed-4c7e-4914-ac3e-953b8930635e",
+      "name": "Stability AI API",
+      "capabilities": [
+        "image_generation",
+        "task_execution",
+        "multimodal"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "zh",
+        "ja"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "e1054f1a-8d3c-4773-9092-7ce30da2b9a8",
+      "name": "OpenRouter Model Gateway",
+      "capabilities": [
+        "model_routing",
+        "task_execution",
+        "multi_agent_coordination",
+        "code_generation"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "zh",
+        "ja",
+        "ko",
+        "ar",
+        "pt",
+        "de",
+        "es",
+        "ru",
+        "hi"
+      ],
+      "status": "probed_ok"
+    },
+    {
+      "id": "ada07ad6-4fc5-40e0-8517-a8416f84351d",
+      "name": "Hugging Face Spaces",
+      "capabilities": [
+        "demo_hosting",
+        "task_execution",
+        "model_serving"
+      ],
+      "languages": [
+        "en",
+        "fr",
+        "zh",
+        "de",
+        "es",
+        "ja",
+        "ko",
+        "ru",
+        "ar",
+        "pt",
+        "hi",
+        "vi"
       ],
       "status": "probed_ok"
     },
@@ -393,38 +686,6 @@
         "zh",
         "ja",
         "ko"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "5292b08b-c272-4490-af87-e860a1e49e63",
-      "name": "Groq Inference API",
-      "capabilities": [
-        "ultra_fast_inference",
-        "text_generation",
-        "code_generation",
-        "task_execution"
-      ],
-      "languages": [
-        "en",
-        "fr",
-        "de",
-        "es",
-        "pt"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "f3bcbc8a-4354-4104-b3d5-735d2b01122b",
-      "name": "Beth",
-      "capabilities": [
-        "code_generation",
-        "data_research",
-        "task_execution",
-        "bounty_solving"
-      ],
-      "languages": [
-        "en"
       ],
       "status": "probed_ok"
     },
@@ -497,186 +758,6 @@
         "ja",
         "zh",
         "ar"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "e58d68f4-5b0d-4d61-aee0-ee7feb954d35",
-      "name": "runtime-recruiter-agent",
-      "capabilities": [
-        "recruitment",
-        "viral_seeding",
-        "network_expansion",
-        "agent_onboarding"
-      ],
-      "languages": [
-        "en",
-        "fr",
-        "zh",
-        "es",
-        "ar",
-        "pt",
-        "de",
-        "ja",
-        "ko",
-        "ru"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "d7cde638-5f4e-4270-99fe-f231f7aa47d1",
-      "name": "n8n Workflow Automation",
-      "capabilities": [
-        "workflow",
-        "webhook",
-        "integration",
-        "automation",
-        "api_chaining"
-      ],
-      "languages": [
-        "en",
-        "de",
-        "fr",
-        "es"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "cb1eb10b-b438-4cb8-93c2-2109ec194bec",
-      "name": "MetaGPT",
-      "capabilities": [
-        "software_company",
-        "multi_role",
-        "prd",
-        "architecture",
-        "code"
-      ],
-      "languages": [
-        "en",
-        "zh"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "e18cc110-b23b-449d-830e-17ea4fd10358",
-      "name": "LangChain Agents",
-      "capabilities": [
-        "tool_use",
-        "chain",
-        "memory",
-        "retrieval",
-        "code"
-      ],
-      "languages": [
-        "en"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "42fb01ed-4c7e-4914-ac3e-953b8930635e",
-      "name": "Stability AI API",
-      "capabilities": [
-        "image_generation",
-        "task_execution",
-        "multimodal"
-      ],
-      "languages": [
-        "en",
-        "fr",
-        "zh",
-        "ja"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "e1054f1a-8d3c-4773-9092-7ce30da2b9a8",
-      "name": "OpenRouter Model Gateway",
-      "capabilities": [
-        "model_routing",
-        "task_execution",
-        "multi_agent_coordination",
-        "code_generation"
-      ],
-      "languages": [
-        "en",
-        "fr",
-        "zh",
-        "ja",
-        "ko",
-        "ar",
-        "pt",
-        "de",
-        "es",
-        "ru",
-        "hi"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "e16ea541-81f7-4694-9fd2-fb7a942f5719",
-      "name": "SuperAGI",
-      "capabilities": [
-        "autonomous",
-        "tool_use",
-        "memory",
-        "code_generation",
-        "browser"
-      ],
-      "languages": [
-        "en"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "7b2a35f8-391d-4c58-9ff6-b551994150b4",
-      "name": "ChatDev OpenBMB",
-      "capabilities": [
-        "software_dev",
-        "multi_agent",
-        "code_generation",
-        "testing"
-      ],
-      "languages": [
-        "en",
-        "zh"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "414ff01c-742c-4732-8e6b-a2f55aa38be3",
-      "name": "Smithery MCP Registry",
-      "capabilities": [
-        "mcp",
-        "tool_discovery",
-        "api_registry",
-        "orchestration"
-      ],
-      "languages": [
-        "en"
-      ],
-      "status": "probed_ok"
-    },
-    {
-      "id": "ada07ad6-4fc5-40e0-8517-a8416f84351d",
-      "name": "Hugging Face Spaces",
-      "capabilities": [
-        "demo_hosting",
-        "task_execution",
-        "model_serving"
-      ],
-      "languages": [
-        "en",
-        "fr",
-        "zh",
-        "de",
-        "es",
-        "ja",
-        "ko",
-        "ru",
-        "ar",
-        "pt",
-        "hi",
-        "vi"
       ],
       "status": "probed_ok"
     },
@@ -755,35 +836,6 @@
       "languages": [
         "en",
         "es"
-      ],
-      "status": "probed_failed"
-    },
-    {
-      "id": "a07cfd24-1767-406d-9fd8-63e5f192975e",
-      "name": "CrewAI Framework",
-      "capabilities": [
-        "multi_agent",
-        "role_play",
-        "task_delegation",
-        "collaboration"
-      ],
-      "languages": [
-        "en",
-        "pt"
-      ],
-      "status": "probed_failed"
-    },
-    {
-      "id": "fcd2f60d-d1b5-43f1-b06f-964adc632410",
-      "name": "Fetch.ai Agentverse",
-      "capabilities": [
-        "search",
-        "coordination",
-        "uagent",
-        "negotiation"
-      ],
-      "languages": [
-        "en"
       ],
       "status": "probed_failed"
     }
