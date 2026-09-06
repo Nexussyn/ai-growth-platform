@@ -25,6 +25,7 @@ type Opportunity = {
   title: string;
   url: string;
   reward_usd: number | null;
+  tech_stack?: string[];
   raw: Record<string, unknown>;
 };
 
@@ -202,7 +203,7 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 // --- Source 3: Algora public bounties (best-effort, no key) ---
 // If the public endpoint is unreachable or its shape changes, ignore cleanly.
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
+  const r = await fetchT("https://algora.io/api/bounties?status=open&limit=50", {
     headers: { Accept: "application/json" },
   });
   if (!r.ok) return [];
@@ -227,11 +228,19 @@ async function fetchAlgora(): Promise<Opportunity[]> {
     } else {
       reward = extractUsd(title);
     }
+    
+    // Parse tech stack from tags, labels, or language
+    const tech_stack: string[] = [];
+    if (Array.isArray(it.tags)) tech_stack.push(...it.tags.map(String));
+    if (Array.isArray(it.labels)) tech_stack.push(...it.labels.map(String));
+    if (typeof it.language === "string") tech_stack.push(it.language);
+
     out.push({
       source: "algora",
       title: title || `Algora bounty`,
       url,
       reward_usd: reward,
+      tech_stack: [...new Set(tech_stack)].filter(Boolean),
       raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
     });
   }
@@ -271,6 +280,7 @@ async function queueOpportunity(
       url: opp.url,
       title: opp.title,
       reward_usd: opp.reward_usd,
+      tech_stack: opp.tech_stack || [],
       raw: opp.raw,
     },
   });
