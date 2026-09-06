@@ -202,7 +202,7 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 // --- Source 3: Algora public bounties (best-effort, no key) ---
 // If the public endpoint is unreachable or its shape changes, ignore cleanly.
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
+  const r = await fetchT("https://algora.io/api/bounties?status=openconsole.algora.io/api/bounties?status=open&limit=30limit=50", {
     headers: { Accept: "application/json" },
   });
   if (!r.ok) return [];
@@ -220,8 +220,8 @@ async function fetchAlgora(): Promise<Opportunity[]> {
     const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
     let reward: number | null = null;
     if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
-      const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
-      if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
+      const usd = Number((rewardObj as Record<string, unknown>).amount_usd ?? 0);
+      if (Number.isFinite(usd) && usd > 0) reward = usd;
     } else if (typeof it.amount_usd === "number") {
       reward = it.amount_usd as number;
     } else {
