@@ -25,6 +25,7 @@ type Opportunity = {
   title: string;
   url: string;
   reward_usd: number | null;
+  tech_stack?: string[];
   raw: Record<string, unknown>;
 };
 
@@ -85,6 +86,16 @@ function rewardPriority(reward: number | null): number {
   if (reward >= 250) return 50;
   if (reward >= 50) return 30;
   return 15;
+}
+
+function toStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v || "").trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value.split(/[,/|]/).map((v) => v.trim()).filter(Boolean);
+  }
+  return [];
 }
 
 // --- Source 1: Gitcoin Grants Stack Indexer V2 (real public GraphQL) ---
@@ -202,20 +213,40 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 // --- Source 3: Algora public bounties (best-effort, no key) ---
 // If the public endpoint is unreachable or its shape changes, ignore cleanly.
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
-  });
-  if (!r.ok) return [];
-  const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
+  const endpoints = [
+    "https://algora.io/api/bounties?status=open&limit=50",
+    "https://console.algora.io/api/bounties?status=open&limit=50",
+  ];
+  let items: Array<Record<string, unknown>> = [];
+  for (const endpoint of endpoints) {
+    const r = await fetchT(endpoint, { headers: { Accept: "application/json" } });
+    if (!r.ok || !String(r.headers.get("content-type") || "").includes("json")) continue;
+    const j = await r.json().catch(() => null);
+    // Tolerate common API shapes without assuming undocumented field names.
+    items = Array.isArray(j)
+      ? j
+      : (j?.items as Array<Record<string, unknown>>) ||
+        (j?.bounties as Array<Record<string, unknown>>) ||
+        (j?.data as Array<Record<string, unknown>>) ||
+        [];
+    if (items.length > 0) break;
+  }
   const out: Opportunity[] = [];
+  const seen = new Set<string>();
   for (const it of items) {
-    const url = String(it.url || it.html_url || it.link || "");
+    const url = String(it.url || it.html_url || it.link || it.issue_url || "");
     if (!url || !/^https?:\/\//.test(url)) continue;
+    if (seen.has(url)) continue;
+    seen.add(url);
     const title = String(it.title || it.task || it.name || "").slice(0, 200);
+    const techStack = [
+      ...toStringList(it.tech_stack),
+      ...toStringList(it.technologies),
+      ...toStringList(it.languages),
+      ...toStringList(it.labels),
+      ...toStringList(it.tags),
+      ...toStringList(it.stack),
+    ].filter((value, index, arr) => arr.findIndex((v) => v.toLowerCase() === value.toLowerCase()) === index);
     // Algora amounts are typically minor units (cents) under reward/amount.
     const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
     let reward: number | null = null;
@@ -232,7 +263,12 @@ async function fetchAlgora(): Promise<Opportunity[]> {
       title: title || `Algora bounty`,
       url,
       reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
+      tech_stack: techStack,
+      raw: {
+        status: String(it.status || ""),
+        org: String(it.org || it.organization || ""),
+        tech_stack: techStack,
+      },
     });
   }
   return out;
@@ -271,6 +307,7 @@ async function queueOpportunity(
       url: opp.url,
       title: opp.title,
       reward_usd: opp.reward_usd,
+      tech_stack: opp.tech_stack ?? [],
       raw: opp.raw,
     },
   });
