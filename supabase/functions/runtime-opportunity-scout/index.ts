@@ -201,10 +201,19 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 
 // --- Source 3: Algora public bounties (best-effort, no key) ---
 // If the public endpoint is unreachable or its shape changes, ignore cleanly.
+// NOTE: As of 2026-09-10, the public API endpoint (https://algora.io/api/bounties)
+// returns HTML (Phoenix LiveView app), not JSON. This function returns an empty
+// array until a proper JSON API is available. The integration structure is in place
+// and will work immediately when the API is fixed.
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
+  const r = await fetchT("https://algora.io/api/bounties?status=open&limit=50", {
     headers: { Accept: "application/json" },
   });
+  // If the endpoint returns HTML (LiveView app) instead of JSON, fail gracefully.
+  const contentType = r.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    return [];
+  }
   if (!r.ok) return [];
   const j = await r.json().catch(() => null);
   // Tolerate both {items:[...]} and bare-array shapes.
