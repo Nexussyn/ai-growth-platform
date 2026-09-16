@@ -1,0 +1,26 @@
+[
+  {
+    "id": "bty_algora_01",
+    "title": "Fix memory leak in web worker",
+    "url": "https://algora.io/bounty/bty_algora_01",
+    "status": "open",
+    "reward": {
+      "amount": 25000,
+      "amount_usd": 250.00,
+      "currency": "USD"
+    },
+    "org": "algora-io"
+  },
+  {
+    "id": "bty_algora_02",
+    "title": "Implement dark mode theme toggle",
+    "url": "https://algora.io/bounty/bty_algora_02",
+    "status": "open",
+    "reward": {
+      "amount": 5000,
+      "amount_usd": 50.00,
+      "currency": "USDC"
+    },
+    "org": "community-lab"
+  }
+]
