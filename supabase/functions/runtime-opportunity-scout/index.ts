@@ -232,7 +232,7 @@ async function fetchAlgora(): Promise<Opportunity[]> {
       title: title || `Algora bounty`,
       url,
       reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
+      raw: { status: String(it.status || ""), org: String(it.org || it.organization || ""), tech_stack: Array.isArray(it.tags) ? (it.tags as any[]).map(String) : Array.isArray(it.tech_stack) ? (it.tech_stack as any[]).map(String) : typeof it.language === "string" ? [it.language] : [] },
     });
   }
   return out;
