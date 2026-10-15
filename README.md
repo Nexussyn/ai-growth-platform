@@ -103,6 +103,7 @@ Prices are dynamic — adjusted hourly by `agent-optimizer` based on demand.
 |---|---|---|
 | `agent-optimizer` | Adjusts service prices hourly via Claude | 10% commission on revenue gains |
 | `agent-scout` | Discovers buyers in A2A/ACP registries | 5% of revenue from referred clients |
+| `runtime-opportunity-scout` | Discovers real bounties on external platforms (Gitcoin, GitHub, Algora) | 2% of successful claim payouts |
 | `agent-monitor` | Health-checks endpoints, fixes incidents | 0.001 USDC per resolved incident |
 
 ---
