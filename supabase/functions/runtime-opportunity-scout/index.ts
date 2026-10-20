@@ -1,5 +1,6 @@
 // runtime-opportunity-scout v1
 // Opportunistic discovery of REAL paid opportunities from public external sources.
+import { createHash } from 'https://deno.land/std@0.177.0/hash/mod.ts'
 // Queries live public APIs (Gitcoin Grants Stack Indexer V2, GitHub bounty issues,
 // Algora bounties) and queues each genuine opportunity into runtime_jobs for the
 // agentic bridge to solve. No mocks, no fabricated rewards: if a reward is not
@@ -12,6 +13,52 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
+async function fetchAlgoraBounties() {
+  const res = await fetch(ALGORA_API, {
+    headers: { 'Accept': 'application/json' },
+  })
+  if (!res.ok) throw new Error(`Algora API error: ${res.status}`)
+  return await res.json()
+}
+
+function parseAlgoraBounty(bounty: any) {
+  const url = bounty.url || bounty.html_url || `https://algora.io/bounties/${bounty.id}`
+  const sha1 = createHash('sha1').update(url).toString()
+  let rewardUsd: number | null = null
+  if (typeof bounty.reward_usd === 'number') {
+    rewardUsd = bounty.reward_usd
+  } else if (typeof bounty.reward === 'number') {
+    rewardUsd = bounty.reward
+  } else if (typeof bounty.amount === 'number') {
+    rewardUsd = bounty.amount
+  } else if (typeof bounty.reward_usd === 'string') {
+    const parsed = parseFloat(bounty.reward_usd.replace(/[^0-9.]/g, ''))
+    if (!isNaN(parsed)) rewardUsd = parsed
+  }
+  const techStack = Array.isArray(bounty.tech_stack)
+    ? bounty.tech_stack
+    : Array.isArray(bounty.languages)
+      ? bounty.languages
+      : []
+  return {
+    task_id: sha1,
+    title: bounty.title || 'Untitled Algora Bounty',
+    url,
+    reward_usd: rewardUsd,
+    tech_stack: techStack,
+    source: 'algora',
+  }
+}
+
+async function upsertAlgoraBounties(supabase: any, bounties: any[]) {
+  const rows = bounties.map(parseAlgoraBounty)
+  const { error } = await supabase
+    .from('runtime_jobs')
+    .upsert(rows, { onConflict: 'task_id' })
+  if (error) throw error
+  return rows.length
+}
+
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -20,8 +67,10 @@ const UA = "runtime-opportunity-scout/1.0 (+open-source-federation)";
 const FETCH_TIMEOUT_MS = 9000;
 
 // Normalized real opportunity shape.
+    const algoraBounties = await fetchAlgoraBounties()
+    const inserted = await upsertAlgoraBounties(supabase, algoraBounties)
 type Opportunity = {
-  source: string;
+      JSON.stringify({ ok: true, algora_inserted: inserted }),
   title: string;
   url: string;
   reward_usd: number | null;
