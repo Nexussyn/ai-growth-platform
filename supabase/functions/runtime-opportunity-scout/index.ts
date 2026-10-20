@@ -170,6 +170,8 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
     for (const it of items) {
       const html = String(it.html_url || "");
       if (!html || seen.has(html)) continue;
+      // Filter known spam / synthetic bounty farms that pollute label:bounty search.
+      if (/bounty-plaza|awesome-agent-bounties|SecureBananaLabs\/bug-bounty/i.test(html)) continue;
       seen.add(html);
       const title = String(it.title || "").slice(0, 200);
       const body = String(it.body || "").slice(0, 1000);
@@ -200,42 +202,167 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 }
 
 // --- Source 3: Algora public bounties (best-effort, no key) ---
-// If the public endpoint is unreachable or its shape changes, ignore cleanly.
-async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
-  });
+// Algora's public JSON API has been observed returning HTTP 406 Not Acceptable
+// from multiple hosts (see docs/algora-api-sample.md). We try several endpoints,
+// then fall back to GitHub Search for open issues that still reference Algora
+// funding URLs / amounts so the scout keeps discovering real opportunities.
+function parseAlgoraItems(j: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(j)) return j as Array<Record<string, unknown>>;
+  if (!j || typeof j !== "object") return [];
+  const o = j as Record<string, unknown>;
+  for (const key of ["items", "bounties", "data", "results"]) {
+    const v = o[key];
+    if (Array.isArray(v)) return v as Array<Record<string, unknown>>;
+    if (v && typeof v === "object" && Array.isArray((v as Record<string, unknown>).items)) {
+      return (v as Record<string, unknown>).items as Array<Record<string, unknown>>;
+    }
+  }
+  return [];
+}
+
+function parseAlgoraReward(it: Record<string, unknown>, title: string): number | null {
+  const rewardObj =
+    (it.reward as Record<string, unknown> | null) ||
+    (it.amount as Record<string, unknown> | null) ||
+    null;
+  if (rewardObj && typeof rewardObj === "object") {
+    if ("amount" in rewardObj) {
+      const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
+      if (Number.isFinite(cents) && cents > 0) {
+        // Heuristic: large integers look like minor units (cents).
+        return cents >= 1000 ? cents / 100 : cents;
+      }
+    }
+    if ("usd" in rewardObj) {
+      const n = Number((rewardObj as Record<string, unknown>).usd);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  if (typeof it.amount_usd === "number" && it.amount_usd > 0) return it.amount_usd as number;
+  if (typeof it.reward_usd === "number" && it.reward_usd > 0) return it.reward_usd as number;
+  if (typeof it.amount === "number" && it.amount > 0) {
+    const n = it.amount as number;
+    return n >= 1000 ? n / 100 : n;
+  }
+  return extractUsd(title);
+}
+
+async function fetchAlgoraApi(): Promise<{ opps: Opportunity[]; sample: Record<string, unknown> | null }> {
+  const endpoints = [
+    "https://algora.io/api/bounties?status=open&limit=50",
+    "https://console.algora.io/api/bounties?status=open&limit=50",
+    "https://algora.io/api/v1/bounties?status=open&limit=50",
+  ];
+  const sample: Record<string, unknown> = { tried: [], note: "live probe from runtime-opportunity-scout" };
+  for (const endpoint of endpoints) {
+    try {
+      const r = await fetchT(endpoint, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": UA,
+        },
+      });
+      const text = await r.text().catch(() => "");
+      (sample.tried as Array<Record<string, unknown>>).push({
+        endpoint,
+        status: r.status,
+        content_type: r.headers.get("content-type"),
+        body_preview: text.slice(0, 400),
+      });
+      if (!r.ok) continue;
+      let j: unknown = null;
+      try {
+        j = JSON.parse(text);
+      } catch {
+        continue;
+      }
+      const items = parseAlgoraItems(j);
+      const opps: Opportunity[] = [];
+      for (const it of items) {
+        const url = String(it.url || it.html_url || it.link || it.issue_url || "");
+        if (!url || !/^https?:\/\//.test(url)) continue;
+        const title = String(it.title || it.task || it.name || "").slice(0, 200);
+        const reward = parseAlgoraReward(it, title);
+        opps.push({
+          source: "algora",
+          title: title || "Algora bounty",
+          url,
+          reward_usd: reward,
+          raw: {
+            status: String(it.status || ""),
+            org: String(it.org || it.organization || it.owner || ""),
+            endpoint,
+          },
+        });
+      }
+      if (opps.length) return { opps, sample };
+    } catch (e) {
+      (sample.tried as Array<Record<string, unknown>>).push({
+        endpoint,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  return { opps: [], sample };
+}
+
+// Fallback: open GitHub issues that explicitly reference Algora funding (real URLs).
+async function fetchAlgoraViaGithub(): Promise<Opportunity[]> {
+  const q = `algora.io state:open is:issue`;
+  const url =
+    `https://api.github.com/search/issues?q=${encodeURIComponent(q)}&sort=updated&order=desc&per_page=30`;
+  let r: Response;
+  try {
+    r = await fetchT(url, { headers: { Accept: "application/vnd.github+json" } });
+  } catch {
+    return [];
+  }
   if (!r.ok) return [];
   const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
+  const items: Array<Record<string, unknown>> = (j?.items as Array<Record<string, unknown>>) || [];
   const out: Opportunity[] = [];
+  const spam = /bounty-plaza|awesome-agent-bounties|SecureBananaLabs\/bug-bounty/i;
   for (const it of items) {
-    const url = String(it.url || it.html_url || it.link || "");
-    if (!url || !/^https?:\/\//.test(url)) continue;
-    const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
-    const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
-    let reward: number | null = null;
-    if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
-      const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
-      if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
-    } else if (typeof it.amount_usd === "number") {
-      reward = it.amount_usd as number;
-    } else {
-      reward = extractUsd(title);
-    }
+    const html = String(it.html_url || "");
+    if (!html || spam.test(html)) continue;
+    const title = String(it.title || "").slice(0, 200);
+    const body = String(it.body || "").slice(0, 2000);
+    // Prefer issues that look funded (amount or algora path), never invent $0.
+    const reward = extractUsd(title) ?? extractUsd(body);
+    const hasAlgoraLink = /https?:\/\/(?:www\.)?algora\.io\//i.test(body + title);
+    if (!hasAlgoraLink && reward == null) continue;
     out.push({
       source: "algora",
-      title: title || `Algora bounty`,
-      url,
+      title,
+      url: html,
       reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
+      raw: {
+        via: "github_search_fallback",
+        repo: String(it.repository_url || "").replace("https://api.github.com/repos/", ""),
+        number: Number(it.number ?? 0),
+        labels: Array.isArray(it.labels)
+          ? (it.labels as Array<Record<string, unknown>>).map((l) => String(l.name || "")).filter(Boolean)
+          : [],
+      },
     });
   }
   return out;
+}
+
+async function fetchAlgora(): Promise<Opportunity[]> {
+  const { opps, sample } = await fetchAlgoraApi();
+  // Attach last probe sample onto each row's raw for observability when empty.
+  if (opps.length) return opps;
+  const fallback = await fetchAlgoraViaGithub();
+  if (fallback.length) {
+    for (const o of fallback) {
+      o.raw = { ...o.raw, algora_api_probe: sample };
+    }
+    return fallback;
+  }
+  // Still return empty — never invent bounties. Probe sample is available in
+  // docs/algora-api-sample.md committed with this change.
+  return [];
 }
 
 // Queue one real opportunity into runtime_jobs, idempotent on task_id.
