@@ -13,9 +13,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
 const UA = "runtime-opportunity-scout/1.0 (+open-source-federation)";
 const FETCH_TIMEOUT_MS = 9000;
 
@@ -25,6 +22,7 @@ type Opportunity = {
   title: string;
   url: string;
   reward_usd: number | null;
+  tech_stack: string[] | null;
   raw: Record<string, unknown>;
 };
 
@@ -132,6 +130,7 @@ async function fetchGitcoin(): Promise<Opportunity[]> {
       title: name,
       url,
       reward_usd: reward,
+      tech_stack: null,
       raw: {
         round_id: id,
         chain_id: chainId,
@@ -184,6 +183,7 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
         title,
         url: html,
         reward_usd: reward,
+        tech_stack: labels,
         raw: {
           repo,
           number: Number(it.number ?? 0),
@@ -227,11 +227,17 @@ async function fetchAlgora(): Promise<Opportunity[]> {
     } else {
       reward = extractUsd(title);
     }
+    const languages = Array.isArray(it.languages)
+      ? (it.languages as string[])
+      : Array.isArray(it.tags)
+      ? (it.tags as string[])
+      : null;
     out.push({
       source: "algora",
       title: title || `Algora bounty`,
       url,
       reward_usd: reward,
+      tech_stack: languages,
       raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
     });
   }
@@ -240,7 +246,7 @@ async function fetchAlgora(): Promise<Opportunity[]> {
 
 // Queue one real opportunity into runtime_jobs, idempotent on task_id.
 async function queueOpportunity(
-  sb: ReturnType<typeof createClient>,
+  sb: any,
   prefix: string,
   opp: Opportunity,
 ): Promise<"inserted" | "skipped"> {
@@ -256,7 +262,7 @@ async function queueOpportunity(
   const taskKind = opp.reward_usd != null ? "bounty_solving" : "research";
   const priority = rewardPriority(opp.reward_usd);
 
-  const { error } = await sb.from("runtime_jobs").insert({
+  const { error } = await (sb.from("runtime_jobs") as any).insert({
     task_id: taskId,
     agent_role: "research_agent_external",
     status: "queued",
@@ -271,6 +277,7 @@ async function queueOpportunity(
       url: opp.url,
       title: opp.title,
       reward_usd: opp.reward_usd,
+      tech_stack: opp.tech_stack,
       raw: opp.raw,
     },
   });
@@ -291,7 +298,9 @@ const SOURCES: Array<{ name: string; prefix: string; fn: () => Promise<Opportuni
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
   try {
-    const sb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const sb = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false, autoRefreshToken: false } });
 
     const reports: SourceReport[] = [];
     let totalInserted = 0;
