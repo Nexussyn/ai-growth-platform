@@ -1,0 +1,27 @@
+[
+  {
+    "id": "bty_123456",
+    "title": "Fix Web3 wallet connection bug",
+    "html_url": "https://algora.io/bounty/bty_123456",
+    "status": "open",
+    "reward": {
+      "amount_usd": 150.00,
+      "amount": 15000,
+      "currency": "usd"
+    },
+    "org": "ExampleOrg"
+  },
+  {
+    "id": "bty_789012",
+    "title": "Optimize React render cycles",
+    "html_url": "https://algora.io/bounty/bty_789012",
+    "status": "open",
+    "reward": {
+      "amount_usd": null,
+      "amount": 5000,
+      "currency": "usdc"
+    },
+    "amount_usd": 50.00,
+    "org": "AnotherOrg"
+  }
+]
