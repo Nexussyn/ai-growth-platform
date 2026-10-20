@@ -200,23 +200,33 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 }
 
 // --- Source 3: Algora public bounties (best-effort, no key) ---
-// If the public endpoint is unreachable or its shape changes, ignore cleanly.
+// Uses the Algora public API endpoint. If the endpoint is unreachable or
+// returns non-JSON (e.g. behind auth wall), the function returns [] cleanly.
+// Expected response format (per https://api.docs.algora.io/bounties):
+//   { "next_cursor": "...", "items": [{ "id": "cl...", "amount": 10000,
+//     "currency": "USD", "status": "active", "issue": { "html_url": "...",
+//     "title": "..." }, ... }] }
+// Amount is in cents (10000 = $100.00).
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
+  const r = await fetchT("https://algora.io/api/bounties?status=open&limit=50", {
+    headers: { Accept: "application/json, text/plain, */*" },
   });
   if (!r.ok) return [];
   const j = await r.json().catch(() => null);
+  if (!j) return [];
   // Tolerate both {items:[...]} and bare-array shapes.
   const items: Array<Record<string, unknown>> = Array.isArray(j)
     ? j
     : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
+  return parseAlgoraItems(items);
+}
+
+function parseAlgoraItems(items: Array<Record<string, unknown>>): Opportunity[] {
   const out: Opportunity[] = [];
   for (const it of items) {
     const url = String(it.url || it.html_url || it.link || "");
     if (!url || !/^https?:\/\//.test(url)) continue;
     const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
     const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
     let reward: number | null = null;
     if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
