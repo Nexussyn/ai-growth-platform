@@ -202,37 +202,57 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 // --- Source 3: Algora public bounties (best-effort, no key) ---
 // If the public endpoint is unreachable or its shape changes, ignore cleanly.
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
-  });
-  if (!r.ok) return [];
-  const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
+  const endpoints = [
+    "https://algora.io/api/bounties?status=open&limit=50",
+    "https://console.algora.io/api/bounties?status=open&limit=50",
+  ];
+  let items: Array<Record<string, unknown>> = [];
+  for (const ep of endpoints) {
+    try {
+      const r = await fetchT(ep, { headers: { Accept: "application/json" } });
+      if (r.ok) {
+        const j = await r.json().catch(() => null);
+        const fetchedItems = Array.isArray(j)
+          ? j
+          : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
+        if (fetchedItems.length > 0) {
+          items = fetchedItems;
+          break;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
   const out: Opportunity[] = [];
   for (const it of items) {
-    const url = String(it.url || it.html_url || it.link || "");
+    const url = String(it.url || it.html_url || it.link || it.issue_url || "");
     if (!url || !/^https?:\/\//.test(url)) continue;
     const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
     const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
     let reward: number | null = null;
     if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
       const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
       if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
-    } else if (typeof it.amount_usd === "number") {
+    } else if (typeof it.amount_usd === "number" && Number.isFinite(it.amount_usd) && it.amount_usd > 0) {
       reward = it.amount_usd as number;
+    } else if (typeof it.reward_usd === "number" && Number.isFinite(it.reward_usd) && it.reward_usd > 0) {
+      reward = it.reward_usd as number;
     } else {
       reward = extractUsd(title);
     }
+    const tags = Array.isArray(it.tags) ? it.tags : Array.isArray(it.skills) ? it.skills : [];
     out.push({
       source: "algora",
       title: title || `Algora bounty`,
       url,
       reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
+      raw: {
+        status: String(it.status || "open"),
+        org: String(it.org || it.organization || ""),
+        tags,
+        repo: String(it.repo || it.repository || "")
+      },
     });
   }
   return out;
