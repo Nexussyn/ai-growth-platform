@@ -1,0 +1,11 @@
+{
+  "tasks": {
+    "test": "deno test --allow-read .",
+    "check": "deno check index.ts",
+    "lint": "deno lint algora.ts queue.ts algora_test.ts queue_test.ts"
+  },
+  "nodeModulesDir": "none",
+  "imports": {
+    "@electric-sql/pglite": "npm:@electric-sql/pglite@0.5.8"
+  }
+}

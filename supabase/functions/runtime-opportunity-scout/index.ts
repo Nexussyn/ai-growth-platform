@@ -6,6 +6,8 @@
 // actually extractable from the source it is recorded as null.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { fetchAlgora } from "./algora.ts";
+import { queueOpportunity, type Opportunity, type QueueClient } from "./queue.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,15 +20,6 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const UA = "runtime-opportunity-scout/1.0 (+open-source-federation)";
 const FETCH_TIMEOUT_MS = 9000;
-
-// Normalized real opportunity shape.
-type Opportunity = {
-  source: string;
-  title: string;
-  url: string;
-  reward_usd: number | null;
-  raw: Record<string, unknown>;
-};
 
 type SourceReport = {
   name: string;
@@ -45,14 +38,6 @@ async function fetchT(url: string, init: RequestInit = {}): Promise<Response> {
   } finally {
     clearTimeout(timer);
   }
-}
-
-// Stable deterministic task_id from the source URL (idempotency key).
-async function stableTaskId(prefix: string, key: string): Promise<string> {
-  const data = new TextEncoder().encode(key);
-  const digest = await crypto.subtle.digest("SHA-1", data);
-  const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `${prefix}-${hex.slice(0, 24)}`;
 }
 
 // Best-effort USD amount extraction from free text. Returns null when nothing
@@ -75,16 +60,6 @@ function extractUsd(text: string): number | null {
     }
   }
   return null;
-}
-
-// priority scales with reward; unknown reward gets a small baseline.
-function rewardPriority(reward: number | null): number {
-  if (reward == null) return 3;
-  if (reward >= 5000) return 90;
-  if (reward >= 1000) return 70;
-  if (reward >= 250) return 50;
-  if (reward >= 50) return 30;
-  return 15;
 }
 
 // --- Source 1: Gitcoin Grants Stack Indexer V2 (real public GraphQL) ---
@@ -199,99 +174,17 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
   return out;
 }
 
-// --- Source 3: Algora public bounties (best-effort, no key) ---
-// If the public endpoint is unreachable or its shape changes, ignore cleanly.
-async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
-  });
-  if (!r.ok) return [];
-  const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
-  const out: Opportunity[] = [];
-  for (const it of items) {
-    const url = String(it.url || it.html_url || it.link || "");
-    if (!url || !/^https?:\/\//.test(url)) continue;
-    const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
-    const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
-    let reward: number | null = null;
-    if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
-      const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
-      if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
-    } else if (typeof it.amount_usd === "number") {
-      reward = it.amount_usd as number;
-    } else {
-      reward = extractUsd(title);
-    }
-    out.push({
-      source: "algora",
-      title: title || `Algora bounty`,
-      url,
-      reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
-    });
-  }
-  return out;
-}
-
-// Queue one real opportunity into runtime_jobs, idempotent on task_id.
-async function queueOpportunity(
-  sb: ReturnType<typeof createClient>,
-  prefix: string,
-  opp: Opportunity,
-): Promise<"inserted" | "skipped"> {
-  const taskId = await stableTaskId(prefix, opp.url);
-  const { data: existing } = await sb
-    .from("runtime_jobs")
-    .select("task_id")
-    .eq("task_id", taskId)
-    .maybeSingle();
-  if (existing) return "skipped";
-
-  // Concrete reward => solve it; unknown reward => qualify it first via research.
-  const taskKind = opp.reward_usd != null ? "bounty_solving" : "research";
-  const priority = rewardPriority(opp.reward_usd);
-
-  const { error } = await sb.from("runtime_jobs").insert({
-    task_id: taskId,
-    agent_role: "research_agent_external",
-    status: "queued",
-    task_kind: taskKind,
-    priority,
-    source_class: "external_discovery",
-    target: opp.url,
-    scope: opp.source,
-    success_metric: "submit_solution_and_capture_commission",
-    payload: {
-      source: opp.source,
-      url: opp.url,
-      title: opp.title,
-      reward_usd: opp.reward_usd,
-      raw: opp.raw,
-    },
-  });
-  if (error) {
-    // Unique-violation => another concurrent run won the race; treat as skip.
-    if (String(error.code || "") === "23505" || /duplicate/i.test(String(error.message || ""))) return "skipped";
-    throw new Error(error.message);
-  }
-  return "inserted";
-}
-
 const SOURCES: Array<{ name: string; prefix: string; fn: () => Promise<Opportunity[]> }> = [
   { name: "gitcoin", prefix: "opp-gitcoin", fn: fetchGitcoin },
   { name: "github", prefix: "opp-github", fn: fetchGithubBounties },
-  { name: "algora", prefix: "opp-algora", fn: fetchAlgora },
+  { name: "algora", prefix: "opp-algora", fn: () => fetchAlgora(fetchT) },
 ];
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
   try {
-    const sb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } });
+    // Narrow the SDK's deeply generic client to the queue operations used here.
+    const sb = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false, autoRefreshToken: false } }) as unknown as QueueClient;
 
     const reports: SourceReport[] = [];
     let totalInserted = 0;

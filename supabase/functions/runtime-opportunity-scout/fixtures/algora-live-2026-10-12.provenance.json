@@ -1,0 +1,11 @@
+{
+  "url": "https://algora.io/api/trpc/bounty.list?status=open&limit=50",
+  "final_url": "https://algora.io/api/trpc/bounty.list?status=open&limit=50",
+  "retrieved_at": "2026-10-12T20:47:42.186295+00:00",
+  "http_status": 200,
+  "content_type": "application/json; charset=utf-8",
+  "sha256": "66acb5dcf1be864b3b690d527cf681fda389b36331610db2ea3b49b960c804d7",
+  "bytes": 62,
+  "live": true,
+  "not_synthetic": true
+}
