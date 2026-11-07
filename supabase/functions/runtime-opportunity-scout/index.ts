@@ -202,7 +202,7 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 // --- Source 3: Algora public bounties (best-effort, no key) ---
 // If the public endpoint is unreachable or its shape changes, ignore cleanly.
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
+  const r = await fetchT("https://algora.io/api/bounties?status=open&limit=50", {
     headers: { Accept: "application/json" },
   });
   if (!r.ok) return [];
@@ -232,7 +232,7 @@ async function fetchAlgora(): Promise<Opportunity[]> {
       title: title || `Algora bounty`,
       url,
       reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
+      raw: { status: String(it.status || ""), org: String(it.org || it.organization || ""), tech_stack: Array.isArray(it.tags) ? it.tags.map(String) : (typeof it.tech_stack === "string" ? it.tech_stack.split(",") : []) },
     });
   }
   return out;
