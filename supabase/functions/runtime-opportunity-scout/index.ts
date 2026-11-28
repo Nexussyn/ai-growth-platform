@@ -6,6 +6,14 @@
 // actually extractable from the source it is recorded as null.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  extractUsd,
+  isAlgoraEmptyState,
+  parseAlgoraBounties,
+  stableTaskId,
+  type Opportunity,
+  type SourceFetch,
+} from "./parse.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,20 +27,15 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const UA = "runtime-opportunity-scout/1.0 (+open-source-federation)";
 const FETCH_TIMEOUT_MS = 9000;
 
-// Normalized real opportunity shape.
-type Opportunity = {
-  source: string;
-  title: string;
-  url: string;
-  reward_usd: number | null;
-  raw: Record<string, unknown>;
-};
+// Normalized real opportunity shape is defined in ./parse.ts alongside the
+// parsers that produce it.
 
 type SourceReport = {
   name: string;
   fetched: number;
   inserted: number;
   skipped: number;
+  note?: string;
   error?: string;
 };
 
@@ -45,36 +48,6 @@ async function fetchT(url: string, init: RequestInit = {}): Promise<Response> {
   } finally {
     clearTimeout(timer);
   }
-}
-
-// Stable deterministic task_id from the source URL (idempotency key).
-async function stableTaskId(prefix: string, key: string): Promise<string> {
-  const data = new TextEncoder().encode(key);
-  const digest = await crypto.subtle.digest("SHA-1", data);
-  const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `${prefix}-${hex.slice(0, 24)}`;
-}
-
-// Best-effort USD amount extraction from free text. Returns null when nothing
-// is genuinely present — we never invent a number.
-function extractUsd(text: string): number | null {
-  if (!text) return null;
-  // $1,200 / $1200.50 / USD 500 / 500 USD / 1.5k$
-  const patterns: RegExp[] = [
-    /\$\s?([0-9][0-9,]*(?:\.[0-9]+)?)\s?k\b/i,
-    /\$\s?([0-9][0-9,]*(?:\.[0-9]+)?)/,
-    /\busd\s?([0-9][0-9,]*(?:\.[0-9]+)?)/i,
-    /\b([0-9][0-9,]*(?:\.[0-9]+)?)\s?usd\b/i,
-  ];
-  for (let i = 0; i < patterns.length; i++) {
-    const m = text.match(patterns[i]);
-    if (m) {
-      const isK = i === 0;
-      const n = Number(m[1].replace(/,/g, ""));
-      if (Number.isFinite(n) && n > 0) return isK ? n * 1000 : n;
-    }
-  }
-  return null;
 }
 
 // priority scales with reward; unknown reward gets a small baseline.
@@ -200,42 +173,46 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 }
 
 // --- Source 3: Algora public bounties (best-effort, no key) ---
-// If the public endpoint is unreachable or its shape changes, ignore cleanly.
-async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
+// The documented endpoint is an HTML page, not a JSON API: requesting it with
+// `Accept: application/json` returns 406, and the body is a server-rendered
+// page. We therefore inspect the response content-type before parsing and
+// report *why* a run produced nothing instead of silently returning [].
+const ALGORA_BOUNTIES_URL =
+  Deno.env.get("ALGORA_BOUNTIES_URL") ?? "https://algora.io/api/bounties?status=open&limit=50";
+
+async function fetchAlgora(): Promise<SourceFetch> {
+  const r = await fetchT(ALGORA_BOUNTIES_URL, {
+    // `*/*` keeps the request acceptable to hosts that only serve HTML; a pure
+    // `application/json` Accept is answered with 406 by algora.io.
+    headers: { Accept: "application/json, */*" },
   });
-  if (!r.ok) return [];
-  const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
-  const out: Opportunity[] = [];
-  for (const it of items) {
-    const url = String(it.url || it.html_url || it.link || "");
-    if (!url || !/^https?:\/\//.test(url)) continue;
-    const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
-    const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
-    let reward: number | null = null;
-    if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
-      const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
-      if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
-    } else if (typeof it.amount_usd === "number") {
-      reward = it.amount_usd as number;
-    } else {
-      reward = extractUsd(title);
-    }
-    out.push({
-      source: "algora",
-      title: title || `Algora bounty`,
-      url,
-      reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
-    });
+
+  if (!r.ok) {
+    return { opportunities: [], note: `algora: HTTP ${r.status}` };
   }
-  return out;
+
+  const contentType = (r.headers.get("content-type") ?? "").toLowerCase();
+
+  if (contentType.includes("text/html")) {
+    const html = await r.text().catch(() => "");
+    if (isAlgoraEmptyState(html)) {
+      return { opportunities: [], note: "algora: no open bounties (HTML empty state)" };
+    }
+    return { opportunities: [], note: "algora: HTML response, no JSON bounty list available" };
+  }
+
+  if (!contentType.includes("json")) {
+    return { opportunities: [], note: `algora: unsupported content-type ${contentType || "unknown"}` };
+  }
+
+  const payload = await r.json().catch(() => null);
+  if (payload == null) {
+    return { opportunities: [], note: "algora: response was not valid JSON" };
+  }
+
+  const opportunities = parseAlgoraBounties(payload);
+  const note = opportunities.length === 0 ? "algora: JSON response contained no bounty records" : undefined;
+  return { opportunities, note };
 }
 
 // Queue one real opportunity into runtime_jobs, idempotent on task_id.
@@ -271,6 +248,7 @@ async function queueOpportunity(
       url: opp.url,
       title: opp.title,
       reward_usd: opp.reward_usd,
+      tech_stack: opp.tech_stack ?? [],
       raw: opp.raw,
     },
   });
@@ -282,9 +260,9 @@ async function queueOpportunity(
   return "inserted";
 }
 
-const SOURCES: Array<{ name: string; prefix: string; fn: () => Promise<Opportunity[]> }> = [
-  { name: "gitcoin", prefix: "opp-gitcoin", fn: fetchGitcoin },
-  { name: "github", prefix: "opp-github", fn: fetchGithubBounties },
+const SOURCES: Array<{ name: string; prefix: string; fn: () => Promise<SourceFetch> }> = [
+  { name: "gitcoin", prefix: "opp-gitcoin", fn: async () => ({ opportunities: await fetchGitcoin() }) },
+  { name: "github", prefix: "opp-github", fn: async () => ({ opportunities: await fetchGithubBounties() }) },
   { name: "algora", prefix: "opp-algora", fn: fetchAlgora },
 ];
 
@@ -299,7 +277,8 @@ Deno.serve(async (req: Request) => {
     for (const src of SOURCES) {
       const report: SourceReport = { name: src.name, fetched: 0, inserted: 0, skipped: 0 };
       try {
-        const opps = await src.fn();
+        const { opportunities: opps, note } = await src.fn();
+        if (note) report.note = note;
         report.fetched = opps.length;
         for (const opp of opps) {
           try {
