@@ -202,27 +202,47 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 // --- Source 3: Algora public bounties (best-effort, no key) ---
 // If the public endpoint is unreachable or its shape changes, ignore cleanly.
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
-  });
-  if (!r.ok) return [];
-  const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
+  const urls = [
+    "https://algora.io/api/bounties?status=open&limit=50",
+    "https://console.algora.io/api/bounties?status=open&limit=50",
+  ];
+  let items: Array<Record<string, unknown>> = [];
+  for (const endpoint of urls) {
+    try {
+      const r = await fetchT(endpoint, {
+        headers: { Accept: "application/json, text/plain, */*" },
+      });
+      if (!r.ok) continue;
+      const j = await r.json().catch(() => null);
+      if (!j) continue;
+      const parsed: Array<Record<string, unknown>> = Array.isArray(j)
+        ? j
+        : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
+      if (parsed.length > 0) {
+        items = parsed;
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+
   const out: Opportunity[] = [];
   for (const it of items) {
     const url = String(it.url || it.html_url || it.link || "");
     if (!url || !/^https?:\/\//.test(url)) continue;
     const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
     const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
     let reward: number | null = null;
-    if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
+    if (rewardObj && typeof rewardObj === "object") {
+      const amountUsd = Number((rewardObj as Record<string, unknown>).amount_usd ?? 0);
       const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
-      if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
-    } else if (typeof it.amount_usd === "number") {
+      if (Number.isFinite(amountUsd) && amountUsd > 0) {
+        reward = amountUsd;
+      } else if (Number.isFinite(cents) && cents > 0) {
+        reward = cents / 100;
+      }
+    } else if (typeof it.amount_usd === "number" && (it.amount_usd as number) > 0) {
       reward = it.amount_usd as number;
     } else {
       reward = extractUsd(title);
