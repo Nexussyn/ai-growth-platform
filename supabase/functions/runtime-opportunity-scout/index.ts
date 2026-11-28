@@ -25,6 +25,7 @@ type Opportunity = {
   title: string;
   url: string;
   reward_usd: number | null;
+  tech_stack?: string[];
   raw: Record<string, unknown>;
 };
 
@@ -85,6 +86,33 @@ function rewardPriority(reward: number | null): number {
   if (reward >= 250) return 50;
   if (reward >= 50) return 30;
   return 15;
+}
+
+function normalizeTechStack(values: unknown[]): string[] {
+  const known = new Set([
+    "typescript",
+    "javascript",
+    "python",
+    "react",
+    "next.js",
+    "node",
+    "rust",
+    "go",
+    "solidity",
+    "postgres",
+    "sqlite",
+    "supabase",
+    "tailwind",
+    "deno",
+  ]);
+  const out = new Set<string>();
+  for (const value of values) {
+    const text = String(value || "").toLowerCase();
+    for (const tech of known) {
+      if (text.includes(tech)) out.add(tech);
+    }
+  }
+  return [...out].sort();
 }
 
 // --- Source 1: Gitcoin Grants Stack Indexer V2 (real public GraphQL) ---
@@ -227,12 +255,26 @@ async function fetchAlgora(): Promise<Opportunity[]> {
     } else {
       reward = extractUsd(title);
     }
+    const tags = Array.isArray(it.tags) ? it.tags : [];
+    const techStack = normalizeTechStack([
+      title,
+      it.description,
+      it.language,
+      it.tech,
+      it.tech_stack,
+      ...(tags as unknown[]),
+    ]);
     out.push({
       source: "algora",
       title: title || `Algora bounty`,
       url,
       reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
+      tech_stack: techStack,
+      raw: {
+        status: String(it.status || ""),
+        org: String(it.org || it.organization || ""),
+        tech_stack: techStack,
+      },
     });
   }
   return out;
@@ -271,6 +313,7 @@ async function queueOpportunity(
       url: opp.url,
       title: opp.title,
       reward_usd: opp.reward_usd,
+      tech_stack: opp.tech_stack ?? [],
       raw: opp.raw,
     },
   });
