@@ -30,11 +30,29 @@ type Opportunity = {
 
 type SourceReport = {
   name: string;
+  // ok: bounties found; empty: source healthy but nothing listed;
+  // discontinued: source provably shut down or pivoted away from its
+  // documented API; error: transient failure (network, 5xx, bad payload).
+  status: "ok" | "empty" | "discontinued" | "error";
   fetched: number;
   inserted: number;
   skipped: number;
   error?: string;
 };
+
+// Thrown when a source is provably dead: it answers, but with something
+// that is verifiably not the documented bounty API (e.g. Algora now serves
+// its recruiting-app HTML shell on /api/bounties). This is distinct from a
+// transient failure — operators should act on it (remove or replace the
+// source) rather than retry it.
+class SourceDiscontinuedError extends Error {
+  readonly source: string;
+  constructor(source: string, detail: string) {
+    super(`${source} bounty API appears discontinued: ${detail}`);
+    this.name = "SourceDiscontinuedError";
+    this.source = source;
+  }
+}
 
 // fetch with a hard timeout; never throws a hanging request.
 async function fetchT(url: string, init: RequestInit = {}): Promise<Response> {
@@ -200,42 +218,71 @@ async function fetchGithubBounties(): Promise<Opportunity[]> {
 }
 
 // --- Source 3: Algora public bounties (best-effort, no key) ---
-// If the public endpoint is unreachable or its shape changes, ignore cleanly.
+// STATUS (verified 2026-10-05): Algora has pivoted to a recruiting product.
+// Both documented endpoints now serve the recruiting-app HTML shell instead
+// of bounty JSON. This adapter probes both endpoints; when they provably
+// answer with non-JSON it throws SourceDiscontinuedError so the run report
+// flags the source as discontinued rather than silently returning nothing.
+// If Algora ever restores the JSON API, parsing resumes automatically.
+const ALGORA_ENDPOINTS = [
+  "https://algora.io/api/bounties?status=open&limit=50",
+  "https://console.algora.io/api/bounties?status=open&limit=30",
+];
+
 async function fetchAlgora(): Promise<Opportunity[]> {
-  const r = await fetchT("https://console.algora.io/api/bounties?status=open&limit=30", {
-    headers: { Accept: "application/json" },
-  });
-  if (!r.ok) return [];
-  const j = await r.json().catch(() => null);
-  // Tolerate both {items:[...]} and bare-array shapes.
-  const items: Array<Record<string, unknown>> = Array.isArray(j)
-    ? j
-    : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
-  const out: Opportunity[] = [];
-  for (const it of items) {
-    const url = String(it.url || it.html_url || it.link || "");
-    if (!url || !/^https?:\/\//.test(url)) continue;
-    const title = String(it.title || it.task || it.name || "").slice(0, 200);
-    // Algora amounts are typically minor units (cents) under reward/amount.
-    const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
-    let reward: number | null = null;
-    if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
-      const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
-      if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
-    } else if (typeof it.amount_usd === "number") {
-      reward = it.amount_usd as number;
-    } else {
-      reward = extractUsd(title);
+  let lastDetail = "no endpoint answered";
+  for (const endpoint of ALGORA_ENDPOINTS) {
+    let r: Response;
+    try {
+      r = await fetchT(endpoint, { headers: { Accept: "application/json" } });
+    } catch (e) {
+      lastDetail = `${endpoint}: ${e instanceof Error ? e.message : String(e)}`;
+      continue;
     }
-    out.push({
-      source: "algora",
-      title: title || `Algora bounty`,
-      url,
-      reward_usd: reward,
-      raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
-    });
+    const ct = (r.headers.get("content-type") || "").toLowerCase();
+    if (!r.ok) {
+      lastDetail = `${endpoint}: HTTP ${r.status}`;
+      continue;
+    }
+    if (!ct.includes("application/json")) {
+      // Provably not the bounty API: the app shell is HTML. Keep a short
+      // sample for the run report / PR evidence, then stop probing.
+      const sample = (await r.text().catch(() => "")).slice(0, 200);
+      lastDetail = `${endpoint}: expected JSON, got content-type "${ct || "unknown"}"; body starts with ${JSON.stringify(sample.slice(0, 120))}`;
+      continue;
+    }
+    const j = await r.json().catch(() => null);
+    // Tolerate both {items:[...]} and bare-array shapes.
+    const items: Array<Record<string, unknown>> = Array.isArray(j)
+      ? j
+      : (j?.items as Array<Record<string, unknown>>) || (j?.bounties as Array<Record<string, unknown>>) || [];
+    const out: Opportunity[] = [];
+    for (const it of items) {
+      const url = String(it.url || it.html_url || it.link || "");
+      if (!url || !/^https?:\/\//.test(url)) continue;
+      const title = String(it.title || it.task || it.name || "").slice(0, 200);
+      // Algora amounts are typically minor units (cents) under reward/amount.
+      const rewardObj = (it.reward as Record<string, unknown> | null) || (it.amount as Record<string, unknown> | null) || null;
+      let reward: number | null = null;
+      if (rewardObj && typeof rewardObj === "object" && "amount" in rewardObj) {
+        const cents = Number((rewardObj as Record<string, unknown>).amount ?? 0);
+        if (Number.isFinite(cents) && cents > 0) reward = cents / 100;
+      } else if (typeof it.amount_usd === "number") {
+        reward = it.amount_usd as number;
+      } else {
+        reward = extractUsd(title);
+      }
+      out.push({
+        source: "algora",
+        title: title || `Algora bounty`,
+        url,
+        reward_usd: reward,
+        raw: { status: String(it.status || ""), org: String(it.org || it.organization || "") },
+      });
+    }
+    return out;
   }
-  return out;
+  throw new SourceDiscontinuedError("algora", lastDetail);
 }
 
 // Queue one real opportunity into runtime_jobs, idempotent on task_id.
@@ -297,10 +344,11 @@ Deno.serve(async (req: Request) => {
     let totalInserted = 0;
 
     for (const src of SOURCES) {
-      const report: SourceReport = { name: src.name, fetched: 0, inserted: 0, skipped: 0 };
+      const report: SourceReport = { name: src.name, status: "ok", fetched: 0, inserted: 0, skipped: 0 };
       try {
         const opps = await src.fn();
         report.fetched = opps.length;
+        report.status = opps.length > 0 ? "ok" : "empty";
         for (const opp of opps) {
           try {
             const result = await queueOpportunity(sb, src.prefix, opp);
@@ -317,7 +365,13 @@ Deno.serve(async (req: Request) => {
           }
         }
       } catch (e) {
-        // A failed source must not kill the whole run.
+        // A failed source must not kill the whole run. A discontinued source
+        // is reported distinctly so operators can retire it.
+        if (e instanceof SourceDiscontinuedError) {
+          report.status = "discontinued";
+        } else {
+          report.status = "error";
+        }
         report.error = e instanceof Error ? e.message : String(e);
       }
       reports.push(report);
